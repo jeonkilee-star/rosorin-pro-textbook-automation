@@ -17,9 +17,10 @@ function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--design') out.design = args[++i];
     if (args[i] === '--track') out.track = args[++i];
+    if (args[i] === '--viewer') out.viewer = true;
   }
-  if (!out.design || !DESIGN_LABEL[out.design]) {
-    throw new Error('--design a|b|c 를 지정하세요');
+  if (!out.viewer && (!out.design || !DESIGN_LABEL[out.design])) {
+    throw new Error('--design a|b|c 를 지정하세요 (또는 --viewer로 챕터+형식 선택형 뷰어 생성)');
   }
   if (!out.track || !TRACK_LABEL[out.track]) {
     throw new Error('--track jeondae|daehak 를 지정하세요');
@@ -66,8 +67,17 @@ function prereqHtml(lesson) {
   return items ? `<div class="prereq-links"><h3>📚 선수지식 — 막히면 여기부터</h3>${items}</div>` : '';
 }
 
+// mockup 래퍼 — 기본 build_*.html에서는 항상 active(전부 표시), 챕터+디자인 선택형 뷰어에서는
+// opts.id/opts.active를 넘겨 "선택된 조합 하나만 표시"하도록 재사용한다.
+function mockupWrap(lesson, opts, innerHtml) {
+  opts = opts || {};
+  const id = opts.id || `lesson-${lesson.id}`;
+  const active = opts.active !== false;
+  return `<div class="mockup${active ? ' active' : ''}" id="${id}">${innerHtml}</div>`;
+}
+
 // ============ DESIGN A — NCS 학습모듈 양식 ============
-function renderLessonA(lesson, track) {
+function renderLessonA(lesson, track, opts) {
   let n = 0;
   const sec = (title, bodyHtml) => {
     n++;
@@ -103,7 +113,7 @@ function renderLessonA(lesson, track) {
 
   const photo = lesson.photoBlockHtml || '';
 
-  return `<div class="mockup active" id="lesson-${lesson.id}"><div class="page-frame"><div class="design-a">
+  return mockupWrap(lesson, opts, `<div class="page-frame"><div class="design-a">
     <div class="a-band"><div class="a-kicker">NCS 학습모듈 양식 · 자체 개발 교재</div><h1>${lesson.title}</h1></div>
     <div class="a-meta">
       <div><b>학습모듈명</b>${lesson.moduleName}</div>
@@ -112,11 +122,11 @@ function renderLessonA(lesson, track) {
     </div>
     <div class="a-body">${photo}${sections.join('')}</div>
     <div class="a-footprint"><span>SV로보틱스 · ROSOrin Pro 교재 개발</span><span>${lesson.id}</span></div>
-  </div></div></div>`;
+  </div></div>`);
 }
 
 // ============ DESIGN B — 메이커형 ============
-function renderLessonB(lesson, track) {
+function renderLessonB(lesson, track, opts) {
   const chips = [`⏱ ${lesson.moduleTime}`];
   if (lesson.prereq) chips.push(`선수: ${lesson.prereq}`);
 
@@ -158,7 +168,7 @@ function renderLessonB(lesson, track) {
   const theoryBlock = theoryHtml(lesson, track);
   const prereqBlock = prereqHtml(lesson);
 
-  return `<div class="mockup active" id="lesson-${lesson.id}"><div class="page-frame"><div class="design-b">
+  return mockupWrap(lesson, opts, `<div class="page-frame"><div class="design-b">
     <div class="b-hero">
       <div class="b-step-badge">STEP ${lesson.id}</div>
       <h1>${lesson.title}</h1>
@@ -166,11 +176,11 @@ function renderLessonB(lesson, track) {
     </div>
     <div class="b-body">${photo}${callout}${knowledgeHtml}${prereqBlock}${stepsBlock}${recordBlock}${checkBlock}${advancedBlock}${fixBlock}${quizBlock}${askBlock}${theoryBlock}</div>
     <div class="b-footer"><span>SV로보틱스 · ROSOrin Pro 교재 개발</span><span>${lesson.id}</span></div>
-  </div></div></div>`;
+  </div></div>`);
 }
 
 // ============ DESIGN C — 하이브리드형 ============
-function renderLessonC(lesson, track) {
+function renderLessonC(lesson, track, opts) {
   const photo = lesson.photoBlockHtml || '';
   const moduleCode = (lesson.id || '').split('-')[0];
 
@@ -213,11 +223,11 @@ function renderLessonC(lesson, track) {
   const prereqCard = (lesson.prerequisites || []).length
     ? `<div class="c-card"><div class="c-sec-head"><h2>선수지식 더 보기</h2></div>${prereqItems(lesson)}</div>` : '';
 
-  return `<div class="mockup active" id="lesson-${lesson.id}"><div class="page-frame"><div class="design-c">
+  return mockupWrap(lesson, opts, `<div class="page-frame"><div class="design-c">
     <div class="c-top"><div class="c-kicker">${moduleCode} · ${lesson.moduleName}</div><h1>${lesson.title}</h1></div>
     <div class="c-body">${photo}${goalsCard}${materialsCard}${prereqCard}${safetyCard}${procCard}${recordCard}${evalCard}${advancedCard}${troubleCard}${checkCard}${noteCard}${theoryBlock}</div>
     <div class="c-footer"><span>SV로보틱스 · ROSOrin Pro 교재 개발</span><span>${lesson.id}</span></div>
-  </div></div></div>`;
+  </div></div>`);
 }
 
 const RENDERERS = { a: renderLessonA, b: renderLessonB, c: renderLessonC };
@@ -367,11 +377,103 @@ function buildPage(design, track, lessons) {
 </html>`;
 }
 
+// 챕터(레슨) + 형식(디자인) 조합을 누르면 해당 페이지 하나만 보이는 뷰어.
+// 트랙별로 1개씩 생성 — 콘텐츠가 트랙마다 달라서(심화 이론 유무) 공유 불가.
+function buildViewerPage(track, lessons) {
+  const shortTitle = l => l.title.split(' — ')[0].replace(/^\d[\d.-]*\.?\s*/, '');
+  const designButtons = Object.keys(DESIGN_LABEL).map(d =>
+    `<button type="button" data-design="${d}" aria-selected="${d === 'a' ? 'true' : 'false'}" onclick="selectDesignTab(this)">
+      <span class="tab-label">${DESIGN_LABEL[d]}</span>
+    </button>`).join('');
+
+  const lessonButtons = lessons.map((l, i) =>
+    `<button type="button" data-lesson="${l.id}" aria-selected="${i === 0 ? 'true' : 'false'}" onclick="selectLesson(this)">
+      <span class="tab-label">${shortTitle(l)}</span>
+      <span class="tab-sub">${l.id}</span>
+    </button>`).join('');
+
+  // 20레슨 × 3디자인 = 60블록. 기본으로 보이는 것(design=a, 첫 레슨)만 active, 나머지는 JS로 전환.
+  const firstLessonId = lessons[0].id;
+  const mockups = [];
+  Object.keys(RENDERERS).forEach(design => {
+    lessons.forEach(l => {
+      const active = design === 'a' && l.id === firstLessonId;
+      mockups.push(RENDERERS[design](l, track, { id: `mock-${design}-${l.id}`, active }));
+    });
+  });
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>ROSOrin Pro 교재 뷰어 — ${TRACK_LABEL[track]}</title>
+<link rel="stylesheet" href="../styles/all-designs.css">
+<style>
+  .top{ max-width:1180px; margin:0 auto; padding:28px 20px 0; }
+  .mockup, .mockup.active{ animation:none !important; opacity:1 !important; transform:none !important; }
+  .theory-deepdive{ margin-top:18px; padding:16px 18px; border:1px dashed #7a5cff; border-radius:8px; background:rgba(122,92,255,.06); }
+  .theory-deepdive h3{ margin:0 0 8px; font-size:.92rem; color:#5b3fd9; }
+  .theory-deepdive p{ margin:0 0 8px; font-size:.88rem; line-height:1.7; }
+  .theory-deepdive p:last-child{ margin-bottom:0; }
+  .prereq-links{ margin-top:18px; padding:14px 16px; border:1px dashed #1a8a6a; border-radius:8px; background:rgba(26,138,106,.06); }
+  .prereq-links h3{ margin:0 0 8px; font-size:.88rem; color:#0f6b4f; }
+  .prereq-list{ margin:0; padding-left:1.2em; font-size:.86rem; line-height:1.6; }
+  .prereq-list li{ margin-bottom:10px; }
+  .prereq-focus{ display:block; color:var(--shell-muted, #666e79); font-size:.82rem; margin-top:2px; }
+  .prereq-source{ color:var(--shell-muted, #666e79); font-size:.78rem; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <div class="eyebrow">SV로보틱스 · ROSOrin Pro</div>
+    <h1>ROSOrin Pro 활용 자율주행 로봇 프로그래밍</h1>
+    <p>챕터와 디자인 형식을 골라 해당 페이지만 바로 보세요. 트랙: ${TRACK_LABEL[track]} · <a href="../index.html">← 목록으로</a></p>
+  </div>
+  <div class="switcher-row" style="max-width:1180px; margin:20px auto 0; padding:0 20px;">
+    <div><div class="switcher-label">디자인 형식</div><div class="switcher design">${designButtons}</div></div>
+    <div><div class="switcher-label">챕터(레슨)</div><div class="switcher lesson">${lessonButtons}</div></div>
+  </div>
+  <div class="stage" style="max-width:1180px; margin:20px auto 60px; padding:0 20px;">
+    ${mockups.join('\n')}
+  </div>
+</div>
+<script>
+  var state = { design: 'a', lesson: '${firstLessonId}' };
+  function render(){
+    document.querySelectorAll('.mockup').forEach(function(m){ m.classList.remove('active'); });
+    var el = document.getElementById('mock-' + state.design + '-' + state.lesson);
+    if (el) { el.classList.add('active'); el.scrollIntoView({ behavior:'instant', block:'start' }); }
+  }
+  function selectDesignTab(btn){
+    document.querySelectorAll('.switcher.design button').forEach(function(b){ b.setAttribute('aria-selected', b===btn ? 'true':'false'); });
+    state.design = btn.dataset.design;
+    render();
+  }
+  function selectLesson(btn){
+    document.querySelectorAll('.switcher.lesson button').forEach(function(b){ b.setAttribute('aria-selected', b===btn ? 'true':'false'); });
+    state.lesson = btn.dataset.lesson;
+    render();
+  }
+</script>
+</body>
+</html>`;
+}
+
 function main() {
-  const { design, track } = parseArgs();
+  const { design, track, viewer } = parseArgs();
   const lessons = loadLessons(track);
   if (!lessons.length) throw new Error(`트랙 "${track}"에 속하는 레슨이 없습니다`);
   fs.mkdirSync(BUILD_DIR, { recursive: true });
+
+  if (viewer) {
+    const html = buildViewerPage(track, lessons);
+    const outPath = path.join(BUILD_DIR, `viewer_${track}.html`);
+    fs.writeFileSync(outPath, html, 'utf8');
+    console.log(`wrote ${outPath}  (${lessons.length} lessons x 3 designs)`);
+    return;
+  }
+
   const html = buildPage(design, track, lessons);
   const outPath = path.join(BUILD_DIR, `build_${design}_${track}.html`);
   fs.writeFileSync(outPath, html, 'utf8');
