@@ -1,0 +1,189 @@
+{
+  "id": "06-1",
+  "key": "line",
+  "title": "06-1. 라인트레이싱 색상 캘리브레이션 — 왜 지정한 색을 못 찾았을까?",
+  "moduleTime": "1시간 (실측 디버깅 실습)",
+  "prereq": "03-2. 바퀴 전방향 테스트",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": [
+    "jeondae",
+    "daehak"
+  ],
+  "objectives": [
+    "색상 기반(color-based) 물체 인식이 LAB 색공간 임계값(threshold)으로 동작하는 원리를 설명할 수 있다.",
+    "ROS2 서비스 3종(Trigger·SetBool·커스텀 SetPoint)으로 비전 앱을 켜고 끄고 설정할 수 있다.",
+    "소스코드를 직접 읽어 좌표계(픽셀 vs 정규화) 불일치 버그의 원인을 스스로 진단할 수 있다.",
+    "스캔라인 가중치 구조에서 로봇과 가까운 영역이 왜 더 중요한지 설명할 수 있다."
+  ],
+  "knowledge": [
+    "<code>line_following</code> 앱은 <code>enter</code>(진입) → <code>set_target_color</code>(기준색 지정) → <code>set_running</code>(주행 시작/정지) → <code>exit</code>(종료) 순서의 서비스 호출로 제어한다.",
+    "<b>확인된 사실</b> — <code>set_target_color</code>가 받는 <code>x, y</code>는 픽셀이 아니라 <b>0~1 사이 정규화 좌표(normalized coordinate)</b>다. 실제 소스코드(<code>ColorPicker.__call__</code>)에서 <code>x = int(point.x * 이미지폭)</code>으로 폭을 곱해 픽셀로 환산하는 것을 확인했다.",
+    "3개 스캔라인(scan line)의 가중치는 로봇에 가까운 순서대로 <b>0.7 · 0.2 · 0.1</b>이다 — 가장 가까운 라인 하나가 전체 조향 판단의 70%를 차지한다.",
+    "LAB 색공간은 밝기(L)와 색상(A·B)을 분리해서 표현해 조명 변화에 상대적으로 강하다 — RGB보다 색 추적에 자주 쓰인다."
+  ],
+  "materials": {
+    "재료·자료": "바닥에 붙인 색 테이프(라인)",
+    "기기(장비·공구)": "ROSOrin Pro, 카메라 스트림 확인용 PC/브라우저"
+  },
+  "safety": [
+    "이번 레슨은 <code>set_running</code>을 켜지 않고(정지 상태) 캘리브레이션만 진행한다 — 로봇이 움직이지 않는다.",
+    "실제 주행 테스트는 다음 레슨(06-2)에서 별도로 다룬다."
+  ],
+  "procedure": {
+    "headers": [
+      "순번",
+      "절차",
+      "판정기준"
+    ],
+    "rows": [
+      [
+        "1",
+        "<b>예측</b>: 픽셀좌표(310, 320)를 그대로 보내면 어떻게 될지 먼저 예상해서 적는다",
+        "예측 기록 완료"
+      ],
+      [
+        "2",
+        "<code>enter</code> → <code>set_target_color</code>(픽셀값) → 결과 화면 캡처",
+        "사진①과 비교"
+      ],
+      [
+        "3",
+        "결과가 예측과 다르면, <code>app/common.py</code>의 <code>ColorPicker</code> 소스코드를 읽고 원인을 찾는다",
+        "버그 지점 특정"
+      ],
+      [
+        "4",
+        "좌표를 0~1 비율로 변환해서 <code>set_target_color</code> 재호출 → 결과 캡처",
+        "사진②와 비교"
+      ],
+      [
+        "5",
+        "결과 기록표 작성 및 소견 서술",
+        "표 작성 완료"
+      ]
+    ]
+  },
+  "code": "ros2 service call /line_following/enter std_srvs/srv/Trigger {}\n\n# (실패) 픽셀좌표를 그대로 보냄 — 화면 밖으로 튕겨나감\nros2 service call /line_following/set_target_color \\\n  interfaces/srv/SetPoint \"{data: {x: 310.0, y: 320.0, z: 0.0}}\"\n\n# (성공) 0~1 사이 정규화좌표로 변환해서 보냄\nros2 service call /line_following/set_target_color \\\n  interfaces/srv/SetPoint \"{data: {x: 0.484, y: 0.8, z: 0.0}}\"\n\nros2 service call /line_following/set_running std_srvs/srv/SetBool \"{data: true}\"",
+  "codeTip": null,
+  "recordTable": {
+    "headers": [
+      "시도",
+      "보낸 좌표",
+      "예측(찾을까?)",
+      "실제 관찰 결과",
+      "판정"
+    ],
+    "rows": [
+      [
+        "1",
+        "x=310, y=320 (픽셀값 그대로)",
+        "<input placeholder=\"찾는다/못찾는다\" type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "2",
+        "x=0.484, y=0.8 (정규화)",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "3",
+        "본인이 고른 다른 좌표",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ]
+    ]
+  },
+  "recordNote": "왜 픽셀좌표는 실패하고 정규화좌표는 성공했는지, 자기 말로 설명해서 적기",
+  "evaluation": {
+    "headers": [
+      "평가준거",
+      "평가방법",
+      "피드백 방법"
+    ],
+    "rows": [
+      [
+        "예측을 먼저 적고 실제 결과와 비교했는가",
+        "기록 확인",
+        "재작성 안내"
+      ],
+      [
+        "소스코드를 읽고 버그 원인을 스스로 설명할 수 있는가",
+        "구술 확인",
+        "코드 재검토 지도"
+      ],
+      [
+        "정규화좌표로 재시도해 성공시켰는가",
+        "실습 관찰",
+        "재시도 안내"
+      ]
+    ]
+  },
+  "advanced": [
+    "스캔라인 가중치가 <code>0.7·0.2·0.1</code>로 로봇에 가까울수록 높은 이유 — 제어이론 관점에서 \"지금 당장 눈앞의 상황\"이 \"저 멀리의 상황\"보다 즉각적인 조향 반응에 더 중요하기 때문이다. 이런 구조를 프리뷰 제어(preview control)라 부르기도 한다.",
+    "같은 이유로, 근접 스캔라인 하나가 잘못 검출되면 먼 두 라인이 맞아도 전체 판단이 크게 틀어진다 — 실측으로 확인한 이번 사례가 정확히 그 경우다."
+  ],
+  "troubleshooting": {
+    "headers": [
+      "증상",
+      "원인",
+      "해결"
+    ],
+    "rows": [
+      [
+        "좌표를 넣었는데 항상 화면 구석 근처의 색을 잡음",
+        "픽셀좌표를 정규화좌표 자리에 넣어 값이 클램프(clamp)됨",
+        "좌표를 이미지폭·높이로 나눠 0~1 사이 값으로 변환"
+      ],
+      [
+        "정규화좌표로도 여전히 못 찾음",
+        "카메라 화이트밸런스로 인한 전체적인 색조 편향(예: 청색 캐스트)",
+        "편향이 덜한 지점에서 재샘플링하거나 threshold 값 조정"
+      ],
+      [
+        "스캔라인 3개 중 일부만 라인을 못 찾음",
+        "라인이 화면의 그 영역(특히 로봇 근접부)까지 안 이어짐",
+        "물리적으로 라인·로봇 위치를 재정렬"
+      ]
+    ]
+  },
+  "checkQuestions": {
+    "headers": [
+      "문항",
+      "질문",
+      "답"
+    ],
+    "rows": [
+      [
+        "1",
+        "<code>set_target_color</code>가 받는 좌표는 픽셀인가 비율인가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "2",
+        "3개 스캔라인 중 가중치가 가장 높은 것은 어디에 있는 라인인가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "3",
+        "근접 스캔라인 하나가 오검출되면 전체 조향에 어떤 영향을 주는가?",
+        "<input type=\"text\"/>"
+      ]
+    ]
+  },
+  "advancedTask": "지금 코드의 <code>weight_sum</code>은 항상 1.0으로 고정돼 있다. 실제로 검출에 성공한 스캔라인의 가중치만 더해서 <code>weight_sum</code>을 동적으로 계산하도록 고쳐보고, 근접 라인이 하나 빠졌을 때 결과가 어떻게 달라지는지 비교해보세요.",
+  "prerequisites": [
+    {
+      "topic": "LAB 색공간 정의(RGB와 다른 점)",
+      "url": "https://www.mathworks.com/help/images/color-based-segmentation-using-the-l-a-b-color-space_ko_KR.html",
+      "focus": "L*(밝기)·a*(빨강-초록)·b*(파랑-노랑) 3채널 정의 부분만 보면 됨 — MATLAB 실습 코드 부분은 건너뛰어도 무방",
+      "source": "MathWorks 공식 도움말(한국어)",
+      "verifiedAt": "2026-09-09"
+    }
+  ],
+  "photoBlockHtml": "<div class=\"wheel-photo-wrap\"><div class=\"line-photo-trio\"><div class=\"wheel-photo-item\"><div aria-label=\"라인트레이싱 결과 화면, 파란 점이 실제 테이프 위치가 아닌 엉뚱한 자리에 찍혀있음\" class=\"wheel-photo line-photo-fail\" role=\"img\"></div><span class=\"wheel-photo-tag\">① 픽셀좌표로 시도 — 실패</span></div><div class=\"wheel-photo-item\"><div aria-label=\"라인트레이싱 결과 화면, 파란 점 3개가 모두 실제 테이프 위에 정확히 찍혀있음\" class=\"wheel-photo line-photo-fixed\" role=\"img\"></div><span class=\"wheel-photo-tag\">② 정규화좌표로 재시도 — 성공</span></div><div class=\"wheel-photo-item\"><div aria-label=\"3개 스캔영역과 각 영역의 검출 중심점을 색으로 표시한 분석 화면, 로봇과 가장 가까운 하단 영역이 오검출됨\" class=\"wheel-photo line-photo-roi\" role=\"img\"></div><span class=\"wheel-photo-tag\">③ 3-스캔라인 가중치 분석</span></div></div><p class=\"wheel-photo-cap\"><b>실측으로 잡은 진짜 버그</b> — <code>set_target_color</code> 서비스에 픽셀좌표(예: 310,320)를 그대로 보냈더니①, 소스코드 안에서 <code>x = int(point.x * 이미지폭)</code>로 다시 곱해져 좌표가 화면 밖으로 튕겨나갔습니다. 화면 비율(0~1)로 바꿔 보내자② 정확히 테이프 위에 점이 찍혔습니다. 여기에 더해 로봇과 가장 가까운 스캔라인이 전체 조향 판단의 70%를 차지한다는 것도③ 코드에서 직접 확인했습니다 — 코드를 읽지 않았다면 절대 몰랐을 원인입니다.</p></div>",
+  "sortOrder": 5
+}

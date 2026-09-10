@@ -1,0 +1,101 @@
+{
+  "id": "08-1",
+  "key": "lidar",
+  "title": "08-1. 라이다 장애물 회피 — 가까운 쪽 반대로 피하기",
+  "moduleTime": "1시간 (실습 + 결과기록 포함)",
+  "prereq": "03-2. 바퀴 전방향 테스트",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": ["jeondae", "daehak"],
+  "objectives": [
+    "라이다 스캔 데이터를 좌·우 절반으로 나눠 각각의 최단거리를 비교하는 장애물 회피 로직의 원리를 설명할 수 있다.",
+    "set_running(0~3) 4가지 모드 중 이번 레슨이 다루는 모드 1(장애물 회피)을 실제로 실행하고 관찰할 수 있다.",
+    "라이다는 전원 인가 직후 워밍업이 필요하다는 이전 실측 사실을 알고, 정상 데이터가 나오는지 먼저 확인한 뒤 실습을 시작할 수 있다.",
+    "threshold(회피 시작 거리)를 바꿔가며 로봇의 반응 시점이 어떻게 달라지는지 비교할 수 있다."
+  ],
+  "knowledge": [
+    "이 로봇의 라이다(Coin-D6 TOF)는 전원 인가 직후 거리값이 0 또는 NaN으로 나오는 현상이 실측으로 확인되어 있고, 공식 절차대로 12분 이상 워밍업하면 정상화된다(정확한 원인은 규명되지 않음) — 실습 전 <code>ros2 topic echo /scan_raw</code>로 값이 정상인지 먼저 확인한다. (출처: 이전 세션 로봇 실기 테스트 인수인계 기록)",
+    "set_running 서비스는 정수 하나(0~3)를 받는다 — 0 종료, 1 장애물 회피, 2 라이다 추종, 3 라이다 경비. 이번 레슨은 모드 1만 다룬다. (소스: <code>LidarController.set_running_srv_callback</code> 주석)",
+    "모드 1의 판단 로직은 전방 240도(<code>MAX_SCAN_ANGLE</code>) 스캔 데이터를 좌·우로 나눠 각각의 최단거리를 구하고, 왼쪽이 가까우면 오른쪽으로 · 오른쪽이 가까우면 왼쪽으로 · 양쪽 다 가까우면 180도 회전한다. (소스: <code>LidarController.lidar_callback</code>의 <code>running_mode == 1</code> 분기)",
+    "threshold(기본 0.6m)와 scan_angle(스캔 각도)은 set_param 서비스로 실시간 조정할 수 있다 — threshold는 0.3~1.5m, scan_angle은 0~90도 범위를 벗어나면 서비스가 실패 응답을 반환하도록 소스코드에 범위 검증이 들어있다. (소스: <code>set_parameters_srv_callback</code>)"
+  ],
+  "materials": {
+    "재료·자료": "장애물로 쓸 상자·의자 등",
+    "기기(장비·공구)": "ROSOrin Pro, 사방 2m 이상 여유공간"
+  },
+  "safety": [
+    "실습 전 로봇 주변(특히 전방) 2m 이상 공간을 확보한다 — 회피 중 회전 반경이 커질 수 있다.",
+    "라이다 워밍업이 안 된 상태(거리값 0/NaN)에서 모드 1을 실행하면 장애물을 인식하지 못해 그대로 충돌할 수 있다 — 반드시 데이터 정상 여부를 먼저 확인한다.",
+    "정지 명령은 03-1·03-2와 동일하게 반복 발행으로 보낸다."
+  ],
+  "procedure": {
+    "headers": ["순번", "절차", "판정기준"],
+    "rows": [
+      ["1", "ros2 topic echo /scan_raw로 거리값이 0/NaN이 아닌지 확인", "정상적인 거리값(m) 출력"],
+      ["2", "enter 호출", "서비스 응답 success"],
+      ["3", "set_running(1)로 장애물 회피 모드 시작", "로봇이 직진 시작"],
+      ["4", "로봇 왼쪽에 장애물 배치 → 반응 관찰, 이어서 오른쪽 → 양쪽 다 막고 반응 관찰", "장애물 반대 방향으로 회전"],
+      ["5", "set_param으로 threshold를 낮춰(예: 0.4) 재시도 → 반응 거리 변화 관찰", "더 가까이에서 반응"],
+      ["6", "결과 기록표 작성", "4가지 케이스 모두 기록"]
+    ]
+  },
+  "code": "# 실습 전 라이다 워밍업 확인 (값이 0이거나 NaN이면 대기)\nros2 topic echo /scan_raw --once\n\nros2 service call /lidar_app/enter std_srvs/srv/Trigger {}\n\n# 모드 1 = 장애물 회피\nros2 service call /lidar_app/set_running interfaces/srv/SetInt64 \"{data: 1}\"\n\n# threshold(m), scan_angle(deg), speed(m/s) 순서\nros2 service call /lidar_app/set_param interfaces/srv/SetFloat64List \\\n  \"{data: [0.4, 90.0, 0.2]}\"",
+  "codeTip": "<b>수행 Tip</b> — 1단계를 건너뛰지 말 것. 워밍업 안 된 라이다로 실습하면 \"회피 로직이 잘못됐다\"고 오해하기 쉬운데, 실제로는 센서 데이터 자체가 비정상인 경우가 많다.",
+  "recordTable": {
+    "headers": ["시도", "장애물 위치", "예상 반응", "실제 반응", "판정"],
+    "rows": [
+      ["1", "왼쪽만", "<input type=\"text\" placeholder=\"오른쪽으로 회전 예상\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["2", "오른쪽만", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["3", "양쪽 다", "<input type=\"text\" placeholder=\"180도 회전 예상\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["4", "threshold 0.4로 낮춘 후 왼쪽만", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"]
+    ]
+  },
+  "recordNote": "threshold를 낮췄을 때 로봇이 장애물에 얼마나 더 가까이 다가간 후에 반응했는지, 체감한 차이를 자유롭게 기록",
+  "evaluation": {
+    "headers": ["평가준거", "평가방법", "피드백 방법"],
+    "rows": [
+      ["실습 전 라이다 데이터 정상 여부를 확인했는가", "실습 관찰", "재확인 안내"],
+      ["좌/우/양쪽 3가지 케이스의 회피 방향을 정확히 예측하고 확인했는가", "기록 확인", "재시도 안내"],
+      ["threshold 파라미터의 역할을 소스코드 근거로 설명할 수 있는가", "구술 확인", "코드 재검토 지도"]
+    ]
+  },
+  "advanced": [
+    "이 코드는 로봇 조향 방식(메카넘 vs Ackermann, <code>MACHINE_TYPE</code>에 'Acker' 포함 여부)에 따라 회피 로직 자체가 완전히 다른 두 갈래로 나뉜다 — Ackermann 차량은 조향각 특성상 단순 제자리 회전이 불가능해서, 회전반경(R)을 계산해 부드럽게 회피하도록 별도로 구현되어 있다. (소스: <code>lidar_callback</code>의 <code>if 'Acker' not in self.machine_type: ... else: ...</code> 두 분기)",
+    "모드 2(라이다 추종)와 모드 3(라이다 경비)는 PID 제어기(pid_yaw·pid_dist)로 \"가장 가까운 물체와의 각도·거리\"를 유지하는 방식이라, 모드 1(단순 좌우 비교)보다 정교하지만 그만큼 구조도 복잡하다 — 이번 레슨에서는 다루지 않는다."
+  ],
+  "troubleshooting": {
+    "headers": ["증상", "원인", "해결"],
+    "rows": [
+      ["장애물이 있는데 반응이 없음", "라이다 워밍업 미완료로 거리값이 0/NaN", "/scan_raw 값을 확인하고 12분 이상 대기 후 재시도"],
+      ["가까이 가도 반응이 늦음", "threshold가 너무 작게 설정됨", "set_param으로 threshold를 높여 재시도(1.5m 이하 범위)"],
+      ["회피하다가 다시 같은 장애물 쪽으로 돎", "직전 회피 방향(last_act)이 번갈아 반전되도록 설계되어 있어 좁은 공간에서 진동할 수 있음", "장애물 사이 폭을 넓히거나 threshold를 낮춰 재시도"]
+    ]
+  },
+  "checkQuestions": {
+    "headers": ["문항", "질문", "답"],
+    "rows": [
+      ["1", "set_running에 넣는 정수 1은 어떤 모드를 의미하는가?", "<input type=\"text\"/>"],
+      ["2", "라이다 실습 전에 왜 /scan_raw 값을 먼저 확인해야 하는가?", "<input type=\"text\"/>"],
+      ["3", "왼쪽과 오른쪽 모두 장애물이 있을 때 로봇은 어떻게 반응하는가?", "<input type=\"text\"/>"]
+    ]
+  },
+  "advancedTask": "MAX_SCAN_ANGLE(240도)을 좁혀서(예: 120도) 로봇이 더 정면의 장애물에만 반응하도록 바꿔보고, 넓은 공간에서 옆을 스쳐 지나가는 물체에 불필요하게 반응하는지 비교해보세요.",
+  "photoBlockHtml": null,
+  "prerequisites": [
+    {
+      "topic": "PID 제어 기초(P·I·D 각 항의 역할과 수식)",
+      "url": "https://blog.sinduy.com/posts/PID-%EC%A0%9C%EC%96%B4%EB%9E%80/",
+      "focus": "글 상단 수식과 'P/PI/PID' 3단 비교 부분만 보면 충분 — 뒤쪽 Ziegler-Nichols 튜닝법·C 의사코드는 심화 참고용이라 안 봐도 됨",
+      "source": "Sinduy's blog (CC BY 4.0, 한국어)",
+      "verifiedAt": "2026-09-09"
+    }
+  ],
+  "theoryDeepDive": {
+    "title": "PID 제어 이론과 이 코드의 게인(gain) 값",
+    "content": [
+      "PID 제어기는 목표값과 현재값의 차이(오차, error)에 세 가지 방식으로 반응한다 — P(비례, Proportional)는 오차 크기에 비례해서, I(적분, Integral)는 오차가 누적된 양에 비례해서, D(미분, Derivative)는 오차가 변하는 속도에 비례해서 반응한다. 최종 출력은 <code>output = Kp·error + Ki·∫error dt + Kd·(d error/dt)</code> 형태다.",
+      "이 lidar_controller.py의 pid_yaw는 PID(1.6, 0, 0.16), pid_dist는 PID(1.7, 0, 0.16)로 설정되어 있다 — I(적분)항은 0으로 꺼져 있고 P와 D만 쓰는 'PD 제어기'다. I항을 안 쓰는 이유로 흔히 드는 것은, 라이다 추종처럼 목표가 계속 움직이는 상황에서 I항이 오차를 계속 누적하면 과거의 오차까지 끌고 가서 오히려 진동·불안정을 키우기 쉽기 때문이다(다만 이 코드에 그런 설계 의도가 주석으로 명시되어 있지는 않다 — 일반적인 제어이론 관점의 해석이다).",
+      "D(미분)항이 0이 아니라는 것은, 오차가 빠르게 변할 때(장애물이 갑자기 가까워질 때 등) 그 변화에 미리 반응해서 진동(overshoot)을 억제하려는 의도로 흔히 해석된다."
+    ]
+  },
+  "sortOrder": 7
+}

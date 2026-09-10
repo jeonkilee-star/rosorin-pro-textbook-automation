@@ -1,0 +1,84 @@
+{
+  "id": "07-1",
+  "key": "tracking",
+  "title": "07-1. 물체 색상 추적 — 카메라로 공을 쫓아가는 로봇 만들기",
+  "moduleTime": "1시간 (실습 + 결과기록 포함)",
+  "prereq": "06-1. 라인트레이싱 색상 캘리브레이션",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": ["jeondae", "daehak"],
+  "objectives": [
+    "object_tracking 앱의 서비스 구조(enter·set_target_color·set_running·exit)가 06-1의 line_following과 동일한 패턴임을 확인할 수 있다.",
+    "PID 제어기 2개(pid_yaw·pid_dist)가 각각 좌우 회전과 전후 이동을 어떻게 담당하는지 설명할 수 있다.",
+    "set_target_color에도 0~1 정규화 좌표가 쓰인다는 06-1의 결론이 이 앱에도 그대로 적용됨을 실습으로 확인할 수 있다.",
+    "물체와의 정지 거리(y_stop)가 어떻게 정해지는지 소스코드로 확인하고, 실제 추적 동작과 연결지어 설명할 수 있다."
+  ],
+  "knowledge": [
+    "<code>object_tracking.py</code>는 <code>line_following</code>과 같은 4개 서비스(enter·set_target_color·set_running·exit)를 그대로 사용한다 — 06-1에서 확인한 \"좌표는 0~1 정규화값\" 원칙이 여기서도 동일하게 적용된다. (실제 소스: <code>OjbectTrackingNode.set_target_color_srv_callback</code> → <code>ColorPicker(request.data, 10)</code>)",
+    "추적은 PID 제어기 2개로 이뤄진다 — <code>pid_yaw</code>(좌우 회전, Kp=0.006)는 물체 x좌표가 화면 중앙(<code>x_stop</code>=320px)에서 벗어난 만큼 회전시키고, <code>pid_dist</code>(전후 이동, Kp=0.002)는 물체 y좌표가 목표 정지 위치(<code>y_stop</code>)에서 벗어난 만큼 전진·후진시킨다. (소스: <code>ObjectTracker.__call__</code>)",
+    "<code>y_stop</code>은 처음 물체를 찾은 순간의 y좌표로 자동 고정된다 — 즉 \"처음 발견했을 때의 거리\"가 기준 정지거리가 된다. (소스: <code>if not self.y_stop_record: ... self.y_stop = int(y)</code>)",
+    "로봇 조향 방식이 Ackermann(<code>MACHINE_TYPE</code>에 'Acker' 포함)이면 회전을 조향각·회전반경(R) 계산으로 변환하고, 메카넘 계열이면 <code>angular.z</code>를 직접 사용한다 — 같은 \"회전하라\"는 판단도 하드웨어 구조에 따라 실제 변환 코드가 달라진다. (소스: <code>ObjectTracker.__call__</code>의 <code>'Acker' in self.machine_type</code> 분기)"
+  ],
+  "materials": {
+    "재료·자료": "색깔 있는 공 또는 물체(라인트레이싱 테이프와 다른 색 권장)",
+    "기기(장비·공구)": "ROSOrin Pro, 카메라 스트림 확인용 PC/브라우저"
+  },
+  "safety": [
+    "이번에도 처음엔 <code>set_running</code>을 켜지 않고 좌표·색상 인식만 먼저 확인한다.",
+    "실제 추적 주행 시 로봇 전방 1.5m 이상 공간을 확보한다.",
+    "물체를 갑자기 가까이 들이대면 로봇이 급하게 후진할 수 있으니 천천히 접근한다."
+  ],
+  "procedure": {
+    "headers": ["순번", "절차", "판정기준"],
+    "rows": [
+      ["1", "enter 호출 → 카메라 스트림에서 물체 위치 확인", "스트림 정상 표시"],
+      ["2", "set_target_color에 정규화 좌표로 물체 색 지정 → get_target_color로 인식된 RGB 확인", "RGB 값 응답 확인"],
+      ["3", "set_running=false 상태에서 물체를 좌우로 움직여 결과 화면에 원이 따라오는지만 관찰(로봇은 정지 상태)", "원이 물체를 따라 이동"],
+      ["4", "set_running=true로 전환 → 실제 추적 주행 관찰", "로봇이 물체 방향으로 회전"],
+      ["5", "물체를 가까이/멀리 움직여 pid_dist가 전후 이동을 만드는지 확인", "전진/후진 반응 확인"],
+      ["6", "결과 기록표 작성", "4가지 테스트 모두 기록"]
+    ]
+  },
+  "code": "ros2 service call /object_tracking/enter std_srvs/srv/Trigger {}\n\n# 0~1 정규화좌표로 목표색 지정 (06-1과 동일 원칙)\nros2 service call /object_tracking/set_target_color \\\n  interfaces/srv/SetPoint \"{data: {x: 0.5, y: 0.4, z: 0.0}}\"\n\nros2 service call /object_tracking/get_target_color std_srvs/srv/Trigger {}\n\n# 좌표·색상 인식만 확인 (로봇은 정지 상태)\nros2 service call /object_tracking/set_running std_srvs/srv/SetBool \"{data: false}\"\n\n# 실제 추적 주행 시작\nros2 service call /object_tracking/set_running std_srvs/srv/SetBool \"{data: true}\"",
+  "codeTip": "<b>수행 Tip</b> — 3단계(정지 상태 관찰)를 건너뛰지 말 것. 추적이 잘 안 될 때 \"색을 못 찾는 문제\"인지 \"찾았는데 이동 계산이 이상한 문제\"인지 구분하는 가장 빠른 방법이다.",
+  "recordTable": {
+    "headers": ["시도", "테스트 내용", "예상 반응", "실제 관찰", "판정"],
+    "rows": [
+      ["1", "물체를 좌우로 이동", "<input type=\"text\" placeholder=\"로봇이 물체 쪽으로 회전\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["2", "물체를 가까이 이동", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["3", "물체를 멀리 이동", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["4", "물체를 화면 밖으로 치움(놓침)", "<input type=\"text\" placeholder=\"로봇이 어떻게 반응할지 먼저 예측\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"]
+    ]
+  },
+  "recordNote": "물체를 놓쳤을 때 로봇이 실제로 어떻게 반응했는지, 왜 그렇게 반응했다고 생각하는지 소스코드 근거와 함께 서술",
+  "evaluation": {
+    "headers": ["평가준거", "평가방법", "피드백 방법"],
+    "rows": [
+      ["06-1과 동일한 정규화좌표 원칙을 스스로 적용했는가", "실습 관찰", "06-1 재확인 안내"],
+      ["pid_yaw·pid_dist가 각각 어떤 축을 담당하는지 설명할 수 있는가", "구술 확인", "코드 재검토 지도"],
+      ["물체를 놓쳤을 때의 동작을 관찰하고 그 이유를 소스코드로 설명했는가", "기록 확인", "재관찰 안내"]
+    ]
+  },
+  "advanced": [
+    "PID 세 항(P·I·D) 중 여기서는 P(비례)항만 쓰인다(Kp만 0이 아니고 I·D는 0으로 설정됨) — 목표에서 벗어난 만큼 비례해서만 반응하는 가장 단순한 제어 방식이다.",
+    "<code>lost_target_count</code> 변수는 선언되고 0으로 리셋만 될 뿐, 실제로 증가시키는 코드는 소스 전체에 없다 — \"물체를 몇 번 놓쳤는지 세서 재탐색하는\" 로직은 이름만 있고 아직 구현되지 않은 상태임을 소스코드에서 직접 확인할 수 있다. 대신 물체를 놓치면(circle이 None) 기본값 Twist()(전부 0)가 그대로 반환되어 로봇이 자연스럽게 멈춘다."
+  ],
+  "troubleshooting": {
+    "headers": ["증상", "원인", "해결"],
+    "rows": [
+      ["추적을 시작해도 로봇이 가만히 있음", "set_running이 여전히 false이거나 color_picker가 아직 클리어되지 않음", "get_target_color로 색이 실제로 지정됐는지 먼저 확인"],
+      ["물체가 가까운데도 계속 다가감", "y_stop이 처음 발견 시점의 값으로 고정되어, 그 이후 목표 정지거리가 바뀌지 않음", "set_target_color를 다시 호출해 y_stop을 재설정"],
+      ["회전이 너무 급격하거나 느림", "pid_yaw의 Kp(0.006)가 로봇·환경에 맞지 않음", "심화 과제처럼 Kp 값을 조정해 재시도"]
+    ]
+  },
+  "checkQuestions": {
+    "headers": ["문항", "질문", "답"],
+    "rows": [
+      ["1", "object_tracking과 line_following이 공유하는 서비스 4개는 무엇인가?", "<input type=\"text\"/>"],
+      ["2", "pid_yaw와 pid_dist는 각각 어떤 축(방향)을 담당하는가?", "<input type=\"text\"/>"],
+      ["3", "y_stop 값은 언제, 어떻게 정해지는가?", "<input type=\"text\"/>"]
+    ]
+  },
+  "advancedTask": "pid_yaw·pid_dist의 Kp 값(0.006, 0.002)을 바꿔가며 로봇의 반응 속도가 어떻게 달라지는지 관찰해보세요. 값을 너무 크게 하면 어떤 현상(진동·오버슈트)이 생기는지도 함께 확인해보세요.",
+  "photoBlockHtml": null,
+  "sortOrder": 6
+}

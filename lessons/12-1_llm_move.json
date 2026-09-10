@@ -1,0 +1,99 @@
+{
+  "id": "12-1",
+  "key": "llm_move",
+  "title": "12-1. LLM 기반 자연어 이동 제어 — 문장 한 줄이 좌표·시간 값으로 바뀌는 과정",
+  "moduleTime": "1시간 (실습 + 결과기록 포함)",
+  "prereq": "11-1. 음성으로 로봇 움직이기",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": ["jeondae", "daehak"],
+  "objectives": [
+    "사용자의 자연어 명령이 시스템 프롬프트를 거쳐 [x, y, z, t] 형식의 이동 명령 리스트로 변환되는 전체 흐름을 설명할 수 있다.",
+    "ASR_LANGUAGE 환경변수가 'Chinese'와 그 외(영어) 두 값만 구분한다는 것, 그리고 이 프로젝트의 한글화 작업이 분기 조건이 아니라 프롬프트 \"내용\"만 번역했다는 것을 소스코드로 직접 확인할 수 있다.",
+    "action 리스트의 마지막 항목이 항상 [0.0, 0.0, 0.0, 0.0]이어야 하는 이유(정지 보장)와 그것이 강제되지 않는다는 점을 함께 설명할 수 있다.",
+    "웨이크업 중 실행 중인 동작을 끊는 interrupt 메커니즘의 동작을 설명할 수 있다."
+  ],
+  "knowledge": [
+    "시스템 프롬프트(PROMPT)는 LLM에게 \"x·y 선속도(m/s)·z 각속도(rad/s)·t 지속시간(s)\"의 4개 값 배열을 순서대로 담은 JSON을 출력하도록 지시한다 — 실제 이동은 이 JSON을 그대로 Twist 메시지로 변환해 발행하는 방식이다. (소스: <code>process()</code>의 <code>msg.linear.x=i[0], msg.linear.y=i[1], msg.angular.z=i[2]</code>, <code>time.sleep(i[3])</code>)",
+    "ASR_LANGUAGE 환경변수는 'Chinese'와 그 외(영어) 두 갈래만 구분하는 조건문(<code>if os.environ[\"ASR_LANGUAGE\"] == 'Chinese'</code>)으로 프롬프트를 고른다 — 이 프로젝트의 한글화 작업으로 'Chinese' 분기 프롬프트의 텍스트 내용 자체는 한국어로 번역돼 있지만, 분기 조건 문자열('Chinese')과 else 분기(영어 프롬프트)는 바뀌지 않았다. 즉 실제 배포 환경의 ASR_LANGUAGE 값이 정확히 무엇인지 직접 확인해야 어느 프롬프트가 실제로 쓰이는지 알 수 있다. (소스: <code>llm_control_move.py</code> 22번째 줄 분기)",
+    "action 리스트의 마지막 항목은 항상 [0.0, 0.0, 0.0, 0.0]이어야 한다고 프롬프트에 명시되어 있다 — 로봇이 명령 실행 후 반드시 멈추도록 LLM에게 요청하는 안전장치다. 다만 이는 프롬프트 \"요청\"일 뿐 코드가 별도로 강제 검증하지는 않는다. (소스: PROMPT 요구사항 2번, <code>process()</code>에 마지막 값 강제 확인 코드 없음)",
+    "웨이크업(재호출)이 감지되면 interrupt 플래그가 켜지고, 다음 action 실행 반복에서 즉시 Twist()(정지)를 발행하고 나머지 동작을 건너뛴다 — 실행 중인 이동을 즉시 취소할 수 있는 구조다. (소스: <code>wakeup_callback</code>, <code>process()</code> 안의 <code>if self.interrupt: ... break</code>)"
+  ],
+  "materials": {
+    "재료·자료": "없음 (음성+LLM 실습)",
+    "기기(장비·공구)": "ROSOrin Pro(온라인 LLM API 연결 필요), 인터넷 연결"
+  },
+  "safety": [
+    "LLM이 예상 밖의 action 값을 생성할 수 있으므로 사방 1.5m 이상 공간을 확보한다.",
+    "처음 실습할 때는 간단한 한 동작짜리 명령(\"앞으로 2초 이동해줘\")부터 시작한다."
+  ],
+  "procedure": {
+    "headers": ["순번", "절차", "판정기준"],
+    "rows": [
+      ["1", "웨이크워드 발화 → LLM 노드가 응답 대기 상태인지 확인", "웨이크업 신호 확인"],
+      ["2", "\"앞으로 2초 이동한 다음 왼쪽으로 1초 회전해줘\"처럼 프롬프트 예시와 비슷한 문장으로 명령", "지시대로 이동"],
+      ["3", "로봇의 실제 동작과 음성 응답(response) 문구를 함께 기록", "응답·동작 모두 기록"],
+      ["4", "동작 실행 중 다시 웨이크워드를 불러 interrupt가 실제로 동작을 멈추는지 확인", "즉시 정지"],
+      ["5", "\"공중부양해줘\"처럼 존재하지 않는 동작을 명령해 action이 빈 리스트로 나오고 응답만 오는지 확인", "동작 없이 응답만"],
+      ["6", "결과 기록표 작성", "4가지 케이스 모두 기록"]
+    ]
+  },
+  "code": "# 프롬프트 요구사항 핵심 발췌 (llm_control_move.py)\n# \"action\": [[x1,y1,z1,t1], [x2,y2,z2,t2], ..., [0.0,0.0,0.0,0.0]]\n# x,y ∈ [-1.0, 1.0] (선속도, m/s) / z ∈ [-1.0, 1.0] (각속도, rad/s) / t (지속시간, s)\n\n# action -> Twist 변환 (process() 내부, 실제 소스)\nfor i in action_list:\n    msg = Twist()\n    msg.linear.x = float(i[0])\n    msg.linear.y = float(i[1])\n    msg.angular.z = float(i[2])\n    self.mecanum_pub.publish(msg)\n    time.sleep(i[3])\n    if self.interrupt:\n        self.interrupt = False\n        self.mecanum_pub.publish(Twist())\n        break",
+  "codeTip": "<b>수행 Tip</b> — 실습 전에 <code>echo $ASR_LANGUAGE</code>로 이 로봇의 실제 설정값을 먼저 확인해보면, 지금 어느 프롬프트(한국어로 번역된 'Chinese' 분기 vs 원문 영어 분기)가 쓰이고 있는지 예측할 수 있다.",
+  "recordTable": {
+    "headers": ["시도", "발화 명령", "예상 동작(action 개수)", "실제 동작·응답", "판정"],
+    "rows": [
+      ["1", "단일 동작 (예: 앞으로 2초 이동)", "<input type=\"text\" placeholder=\"1개 + 정지\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["2", "복합 동작 (전진 + 회전)", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["3", "동작 중 웨이크워드로 interrupt", "<input type=\"text\" placeholder=\"즉시 정지\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["4", "존재하지 않는 동작(공중부양)", "<input type=\"text\" placeholder=\"action=[]\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"]
+    ]
+  },
+  "recordNote": "ASR_LANGUAGE 실제 값 확인 결과와, 그에 따라 어느 언어의 프롬프트가 실제로 쓰이고 있었는지 소스코드 근거와 함께 서술",
+  "evaluation": {
+    "headers": ["평가준거", "평가방법", "피드백 방법"],
+    "rows": [
+      ["자연어 명령 → action 리스트 → Twist 변환 흐름을 설명할 수 있는가", "구술 확인", "코드 재검토 지도"],
+      ["ASR_LANGUAGE 분기와 번역 작업의 관계를 정확히 구분해 설명했는가", "기록 확인", "소스코드 재검토 지도"],
+      ["interrupt 메커니즘을 실습으로 확인했는가", "실습 관찰", "재시도 안내"]
+    ]
+  },
+  "advanced": [
+    "이 코드는 <code>eval()</code>로 LLM 응답 문자열을 직접 파싱한다(<code>eval(self.llm_result[...])</code>) — LLM이 요청한 JSON 형식대로 정확히 답하지 않으면 이 부분에서 예외가 날 수 있다. 실무에서는 임의 코드 실행 위험 때문에 <code>eval</code> 대신 <code>json.loads</code>를 쓰는 것이 더 안전하다.",
+    "이 프롬프트는 \"간결하고(5~10자) 재치 있는\" 응답 문구를 매번 새로 생성하도록 요청한다 — 같은 명령이라도 매번 다른 음성 응답이 나올 수 있는 것은 버그가 아니라 의도된 프롬프트 설계다."
+  ],
+  "troubleshooting": {
+    "headers": ["증상", "원인", "해결"],
+    "rows": [
+      ["명령했는데 로봇이 안 움직이고 응답만 함", "LLM이 \"동작을 찾을 수 없다\"고 판단해 action을 빈 리스트로 반환함", "프롬프트 예시와 비슷한 표현으로 재시도"],
+      ["동작이 끝났는데도 로봇이 계속 움직임", "LLM이 마지막에 [0,0,0,0]을 안 붙였을 가능성(프롬프트 요청일 뿐 강제 아님)", "수동으로 정지 명령 발행, 필요시 프롬프트 예시를 더 명확히 보강"],
+      ["eval 관련 에러가 로그에 남음", "LLM 응답이 요청한 JSON 형식과 다르게 옴", "프롬프트를 더 구체화하거나 같은 명령을 다시 시도"]
+    ]
+  },
+  "checkQuestions": {
+    "headers": ["문항", "질문", "답"],
+    "rows": [
+      ["1", "action 리스트 각 항목의 4개 숫자는 각각 무엇을 의미하는가?", "<input type=\"text\"/>"],
+      ["2", "ASR_LANGUAGE가 'Korean'으로 설정되어 있다면 이 코드는 어느 프롬프트를 쓰는가?", "<input type=\"text\"/>"],
+      ["3", "interrupt는 언제, 어떻게 실행 중인 동작을 멈추는가?", "<input type=\"text\"/>"]
+    ]
+  },
+  "advancedTask": "이 프롬프트에 \"속도는 항상 0.5 이하로 제한\"이라는 안전 규칙을 한 줄 추가해보고, LLM이 실제로 그 제한을 지키는 응답을 여러 번 생성하는지 테스트해서 일관성을 확인해보세요.",
+  "photoBlockHtml": null,
+  "prerequisites": [
+    {
+      "topic": "eval()의 보안 위험과 안전한 대안",
+      "url": "https://leapcell.io/blog/ko/python-evalui-geu-rimyeon-gwa-silsang-jeokuro-yuyonghan-ttae",
+      "focus": "'위험' 섹션과 '안전한 사용법·대안' 섹션 위주로 — eval() 기본 사용법 설명(도입부)은 이미 코드로 봤으니 건너뛰어도 됨",
+      "source": "Leapcell 기술 블로그 (한국어)",
+      "verifiedAt": "2026-09-09"
+    }
+  ],
+  "theoryDeepDive": {
+    "title": "프롬프트 엔지니어링과 eval()의 보안 문제",
+    "content": [
+      "이 프롬프트가 형식 예시(few-shot example)를 2개 넣어둔 것은 우연이 아니다 — LLM에게 규칙을 말로만 설명하는 것보다 실제 입출력 예시를 보여주는 것이 훨씬 안정적으로 원하는 형식을 재현하게 만든다는 것이 프롬프트 엔지니어링의 기본 원칙 중 하나다.",
+      "코드가 LLM 응답을 <code>eval()</code>로 파싱하는 것은 보안 관점에서 위험한 패턴이다 — <code>eval()</code>은 문자열을 파이썬 코드로 그대로 실행하기 때문에, 만약 LLM이 (오작동이든 프롬프트 주입이든) JSON이 아닌 임의의 파이썬 코드를 응답에 포함시키면 그대로 실행될 수 있다. 정석적인 방법은 <code>json.loads()</code>로 파싱해서 JSON이 아니면 예외로 처리하는 것이다 — 실행 가능한 코드가 아니라 순수 데이터로만 취급하기 때문에 이런 위험이 없다."
+    ]
+  },
+  "sortOrder": 11
+}

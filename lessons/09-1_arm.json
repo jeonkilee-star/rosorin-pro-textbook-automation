@@ -1,0 +1,179 @@
+{
+  "id": "09-1",
+  "key": "arm",
+  "title": "09-1. 로봇팔 첫 동작 — 서보(servo) 각도로 관절(joint) 움직이기",
+  "moduleTime": "1.5시간 (실습 + 결과기록 포함)",
+  "prereq": "03. 이동 제어",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": [
+    "jeondae",
+    "daehak"
+  ],
+  "objectives": [
+    "사진에 표시된 서보 ID(1, 2, 3, 4, 5, 10)와 실제 관절 부위를 정확히 대응시켜 설명할 수 있다.",
+    "서보 ID·목표값(0~1000)·지속시간을 지정해 로봇팔 관절을 안전하게 움직일 수 있다.",
+    "실행 전 예측과 실제 결과를 비교하고, 그 차이의 이유를 논리적으로 서술할 수 있다."
+  ],
+  "knowledge": [
+    "로봇팔은 지능형 버스 서보 6개로 구성된다 — ID1 베이스 회전(팬), ID2·3·4 팔 관절, ID5 손목, ID10 그리퍼. (공식 매뉴얼 8장)",
+    "서보 위치값은 0~1000 범위이며, 중앙값(약 500)이 정자세에 해당한다. 실제 각도가 아닌 이 정수값으로 목표를 지정한다.",
+    "서보 명령은 <code>/servo_controller</code> 토픽(<code>ServosPosition</code> 메시지)으로 발행하며, 공식 헬퍼 함수 <code>set_servo_position(pub, duration, ((id, position), ...))</code>(<code>servo_controller.bus_servo_control</code>)를 사용하는 것이 권장 방식이다."
+  ],
+  "materials": {
+    "재료·자료": "없음 (소프트웨어 실습)",
+    "기기(장비·공구)": "ROSOrin Pro, 로봇팔 주변 30cm 이상 여유공간"
+  },
+  "safety": [
+    "로봇팔이 움직이는 동안 관절 사이에 손가락을 넣지 않는다.",
+    "최초 테스트는 중앙값(500) 근처 ±30 이내(약 ±7도)의 작은 변화로 시작한다.",
+    "그리퍼(서보 ID 10) 최초 테스트는 <b>빈손으로만</b> 진행한다 — 손가락 협착 위험.",
+    "이상 동작 시 즉시 전원 스위치로 강제 정지한다."
+  ],
+  "procedure": {
+    "headers": [
+      "순번",
+      "절차",
+      "판정기준"
+    ],
+    "rows": [
+      [
+        "1",
+        "위 사진에서 ID3(팔꿈치)의 실제 위치를 눈으로 확인",
+        "움직일 관절을 정확히 가리킬 수 있음"
+      ],
+      [
+        "2",
+        "아래 코드 작성 — ID3을 중앙값(500)에서 소량만 이동",
+        "코드 저장 완료"
+      ],
+      [
+        "3",
+        "실행 전 예측 기록 → 실행 → 실제로 움직인 관절이 ID3(팔꿈치)가 맞는지 관찰",
+        "지정한 관절만 움직였는지 확인"
+      ],
+      [
+        "4",
+        "예측과 실제를 비교해 실습 결과 기록표 작성",
+        "기록표 4번 항목 작성 완료"
+      ]
+    ]
+  },
+  "code": "#!/usr/bin/env python3\nimport time\nimport rclpy\nfrom rclpy.node import Node\nfrom servo_controller_msgs.msg import ServosPosition\nfrom servo_controller.bus_servo_control import set_servo_position\n\nclass ArmFirstMove(Node):\n    def __init__(self):\n        super().__init__('arm_first_move')\n        self.joints_pub = self.create_publisher(ServosPosition, '/servo_controller', 1)\n        time.sleep(0.5)  # 퍼블리셔 연결 대기\n\n    def move_joint(self, servo_id, position, duration=1.5):\n        # position: 0~1000 (중앙 약 500), duration: 초 단위\n        set_servo_position(self.joints_pub, duration, ((servo_id, position),))\n        self.get_logger().info(f'서보 {servo_id} -> {position} ({duration}s)')\n\ndef main():\n    rclpy.init()\n    node = ArmFirstMove()\n    node.move_joint(3, 520, 1.5)   # ID3(팔꿈치)를 중앙에서 살짝만 이동\n    time.sleep(2.0)\n    rclpy.shutdown()\n\nif __name__ == '__main__':\n    main()",
+  "codeTip": "<b>수행 Tip</b> — <code>set_servo_position()</code>과 <code>create_publisher</code>는 공식 예제(7·13장)에서 실제로 쓰이는 함수를 그대로 가져온 것이다. 관절 1개만 먼저 검증하고, 정상 동작 확인 후 나머지 관절로 확장한다.",
+  "recordTable": {
+    "headers": [
+      "시도",
+      "서보ID",
+      "목표값",
+      "지속시간(s)",
+      "관찰 결과",
+      "판정"
+    ],
+    "rows": [
+      [
+        "1",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/부분/실패\" type=\"text\"/>"
+      ],
+      [
+        "2",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/부분/실패\" type=\"text\"/>"
+      ],
+      [
+        "3",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/부분/실패\" type=\"text\"/>"
+      ]
+    ]
+  },
+  "recordNote": "ID3(팔꿈치)을 중앙값 500에서 520으로 움직이면 실제로 어느 방향으로, 얼마나 움직일 것 같습니까? 실행하기 전에 먼저 적으십시오.",
+  "evaluation": {
+    "headers": [
+      "평가준거",
+      "평가방법",
+      "피드백 방법"
+    ],
+    "rows": [
+      [
+        "메시지 타입을 스스로 조회했는가",
+        "실습 관찰",
+        "재시도 안내"
+      ],
+      [
+        "소각도(small angle)로 안전하게 첫 테스트를 진행했는가",
+        "실습 관찰",
+        "즉시 교정 지도"
+      ],
+      [
+        "예측과 실제 결과를 비교하고 이유를 논리적으로 서술했는가",
+        "기록 확인",
+        "보완 요청"
+      ]
+    ]
+  },
+  "advanced": [
+    "버스 서보(servo)는 하나의 시리얼 라인에 여러 서보가 데이지체인으로 연결되고, 각 서보의 ID로 개별 주소 지정이 가능한 방식이다 — 여러 조명을 하나의 리모컨으로 각각 제어하는 것과 비슷한 원리다.",
+    "<code>set_servo_position()</code>은 여러 서보를 동시에 움직이는 것도 지원한다 — 튜플을 여러 개 넣으면(예: <code>((2, 500), (3, 520))</code>) 여러 관절(joint)이 동시에 목표 위치로 이동한다."
+  ],
+  "troubleshooting": {
+    "headers": [
+      "증상",
+      "원인",
+      "해결"
+    ],
+    "rows": [
+      [
+        "코드를 실행했는데 서보가 전혀 안 움직임",
+        "서보 컨트롤 노드가 안 떠 있거나 다른 프로세스가 시리얼 포트를 점유 중",
+        "<code>ros2 node list</code>로 서보 컨트롤러 노드 확인"
+      ],
+      [
+        "서보가 목표와 다른 위치로 감",
+        "서보 자체 편차(deviation)가 누적된 상태",
+        "제조사 PC 소프트웨어로 서보 편차 보정 (공식 매뉴얼 8.1.2절)"
+      ],
+      [
+        "그리퍼(gripper)가 완전히 안 닫히거나 이상한 소리가 남",
+        "기계적 한계에 도달, 서보 손상 위험",
+        "즉시 반대 방향으로 조정"
+      ]
+    ]
+  },
+  "checkQuestions": {
+    "headers": [
+      "문항",
+      "질문",
+      "답"
+    ],
+    "rows": [
+      [
+        "1",
+        "position 값 500은 대략 몇 도(240도 범위 기준)에 해당하는가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "2",
+        "서보 ID를 여러 개 튜플로 넣으면 어떤 일이 일어나는가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "3",
+        "그리퍼(ID10)를 처음 테스트할 때 왜 반드시 빈손이어야 하는가?",
+        "<input type=\"text\"/>"
+      ]
+    ]
+  },
+  "advancedTask": "ID2·ID3·ID5 세 관절을 순서대로 움직이는 <code>move_joint</code> 호출을 여러 번 배치해서, \"손 흔들기\"처럼 보이는 동작 시퀀스를 만들어보세요.",
+  "photoBlockHtml": "<div class=\"servo-photo-wrap\"><div aria-label=\"ROSOrin Pro 로봇팔 실물 사진, 서보 ID 1부터 5, 10까지 각 관절 위치에 라벨로 표시됨\" class=\"servo-photo\" role=\"img\"></div><p class=\"servo-photo-cap\"><b>서보 ID ↔ 관절 대응</b>(공식 매뉴얼 8장 기준) — ID1 베이스 회전(팬) · ID2 어깨(shoulder) · ID3 팔꿈치(elbow) · ID4·ID5 손목(wrist) · ID10 그리퍼(gripper). 오늘은 이 중 <b>ID3(팔꿈치)</b>를 움직여봅니다.</p></div>",
+  "sortOrder": 8
+}

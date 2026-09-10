@@ -1,0 +1,99 @@
+{
+  "id": "14-1",
+  "key": "object_sorting",
+  "title": "14-1. 색상+AprilTag 물체 분류 — 두 가지 인식 방식을 하나로 합치기",
+  "moduleTime": "1.5시간 (실습 + 결과기록 포함)",
+  "prereq": "13-1. 쓰레기 분류 로봇",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": ["jeondae", "daehak"],
+  "objectives": [
+    "object_sorting 앱이 색상 인식(LAB blob)과 AprilTag 인식(dt_apriltags) 두 가지 방법을 하나의 목표 리스트로 합쳐 처리한다는 것을 설명할 수 있다.",
+    "13-1(쓰레기 분류)과 동일한 안정성 판정(5mm·10프레임) 패턴이 이 앱에서도 독립적으로 재구현되어 있음을 확인한다.",
+    "벤더 소스코드에서 실제로 동작하지 않는 코드(go_home()의 오타·도달 불가능한 분기)를 스스로 찾아내고, 왜 그런데도 프로그램이 멈추지 않는지 설명할 수 있다.",
+    "place_position이 색상 3종과 AprilTag 3종, 총 6개 목적지로 구성된다는 것을 소스코드에서 확인할 수 있다."
+  ],
+  "knowledge": [
+    "object_sorting은 YOLO를 쓰지 않는다 — 색상(빨강·초록·파랑) LAB 임계값 검출과 AprilTag(tag36h11 계열, 태그 크기 0.025m) 마커 검출을 각각 수행한 뒤 하나의 목표 리스트로 합친다. (소스: <code>get_object_pixel_position()</code>이 색상 blob을, <code>main()</code> 안의 <code>at_detector.detect()</code>가 AprilTag를 검출해 같은 리스트에 append)",
+    "물체가 안정됐는지 판단하는 기준(유클리드 거리 5mm 이내, 연속 10프레임)은 13-1(쓰레기 분류)과 완전히 동일한 패턴이다 — 다른 앱인데도 같은 안정성 검증 로직을 각자 독립적으로 다시 구현해서 쓰고 있다. (소스: <code>main()</code>의 count_still/count_move 로직)",
+    "place_position은 6개 목적지로 구성된다 — 색상 3종(green·red·blue)과 AprilTag 3종(tag1·tag2·tag3)이 각각 다른 좌표를 갖는다. (소스: <code>place_position</code> 클래스 변수)",
+    "벤더 소스코드의 <code>go_home()</code> 함수에 실제 버그가 있다 — <code>if self.target[0] in [\"bule\", \"tag1\"]:</code>처럼 \"blue\"가 \"bule\"로 오타나 있고, if/elif 체인이 매번 <code>self.target is not None</code>만 반복 검사하는 구조라 첫 if가 한 번 참이 되면 나머지 elif는 절대 실행되지 않는다 — 즉 target이 blue·green·red·tag2·tag3 중 하나면 t 값이 아예 계산되지 않는다. 다만 이 함수는 계산된 t를 실제로 어디에도 쓰지 않는 죽은 코드라서 프로그램이 멈추거나 에러가 나지는 않는다 — \"코드는 있지만 의도한 대로 동작하지는 않는\" 실제 사례다. (소스: <code>go_home()</code> 147~171행)"
+  ],
+  "materials": {
+    "재료·자료": "빨강·초록·파랑 물체, AprilTag(tag36h11, ID 1~3) 인쇄물",
+    "기기(장비·공구)": "ROSOrin Pro"
+  },
+  "safety": [
+    "로봇팔이 실제로 움직이므로 팔 동작 반경 내에 손이나 물건을 두지 않는다.",
+    "처음 실습 시 목표를 한 종류(색상 하나 또는 태그 하나)만 지정해서 테스트 범위를 좁힌다."
+  ],
+  "procedure": {
+    "headers": ["순번", "절차", "판정기준"],
+    "rows": [
+      ["1", "enter → set_target으로 목표(색상 또는 태그) 지정 → enable_sorting(true)", "서비스 응답 success"],
+      ["2", "색상 물체 하나 놓기 → 분류·이송 관찰", "해당 색 목적지로 이송"],
+      ["3", "AprilTag 물체 하나 놓기 → 같은 방식으로 분류되는지 관찰", "해당 태그 목적지로 이송"],
+      ["4", "소스코드에서 go_home()을 직접 찾아 \"bule\" 오타와 if/elif 구조를 확인 → t 값이 실제로 쓰이는 곳이 있는지 함수 전체를 다시 읽기", "버그 지점 특정"],
+      ["5", "결과 기록표 작성", "3가지 케이스 모두 기록"]
+    ]
+  },
+  "code": "ros2 service call /object_sorting/enter std_srvs/srv/Trigger {}\n\nros2 service call /object_sorting/set_target \\\n  interfaces/srv/SetStringBool \"{data_str: 'red', data_bool: true}\"\n\nros2 service call /object_sorting/enable_sorting \\\n  std_srvs/srv/SetBool \"{data: true}\"",
+  "codeTip": "<b>수행 Tip</b> — 4단계는 로봇을 움직이지 않고 소스코드만 읽는 코드 리뷰 단계다. go_home() 함수 전체(147~171행 부근)를 처음부터 끝까지 읽고, t 변수가 계산된 이후 실제로 사용되는 줄이 있는지 찾아본다.",
+  "recordTable": {
+    "headers": ["시도", "목표 종류", "놓은 물체", "실제 결과", "판정"],
+    "rows": [
+      ["1", "색상(예: red)", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["2", "AprilTag(예: tag1)", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["3", "목표로 지정 안 한 색/태그", "<input type=\"text\" placeholder=\"무시되는지 확인\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["4", "go_home() 코드 리뷰 결과", "<input type=\"text\" placeholder=\"t가 실제로 쓰이는 줄이 있는가?\"/>", "<input type=\"text\"/>", "<input placeholder=\"찾음/못찾음\" type=\"text\"/>"]
+    ]
+  },
+  "recordNote": "go_home()의 버그가 실제 로봇 동작에는 왜 영향이 없는지, 소스코드 근거와 함께 자기 말로 설명",
+  "evaluation": {
+    "headers": ["평가준거", "평가방법", "피드백 방법"],
+    "rows": [
+      ["색상·AprilTag 두 인식 방식이 하나로 합쳐지는 구조를 설명할 수 있는가", "구술 확인", "코드 재검토 지도"],
+      ["13-1과 동일한 안정성 판정 패턴을 스스로 알아봤는가", "기록 확인", "13-1 재비교 안내"],
+      ["go_home()의 버그를 스스로 찾고 그 영향(없음)을 설명했는가", "코드 리뷰 결과 확인", "재검토 지도"]
+    ]
+  },
+  "advanced": [
+    "AprilTag는 격자무늬 흑백 마커로, 카메라가 코너 4개의 픽셀좌표만 찾으면 마커의 3D 자세(위치+회전)까지 계산할 수 있다 — 색상 인식과 달리 조명 변화에 강하고 회전각도까지 정확히 알 수 있는 것이 장점이다.",
+    "이번 go_home() 사례처럼, \"코드가 존재한다고 해서 그 코드가 실제로 의도한 대로 실행된다는 보장은 없다.\" 벤더 소스코드를 신뢰하는 것과, 코드의 흐름을 끝까지 따라가며 검증하는 습관은 서로 다른 이야기라는 것을 이번 실습으로 직접 확인했다."
+  ],
+  "troubleshooting": {
+    "headers": ["증상", "원인", "해결"],
+    "rows": [
+      ["색상 인식이 안 됨", "lab_config.yaml의 색상 임계값이 조명 환경과 안 맞음", "조명을 밝게 하거나 임계값 재조정"],
+      ["AprilTag 인식이 안 됨", "태그 크기(tag_size=0.025m) 또는 family(tag36h11)가 실제 인쇄물과 안 맞음", "정확한 tag36h11 계열 태그를 지정된 크기로 재인쇄"],
+      ["목표로 지정 안 한 물체도 잡음", "set_target으로 target_labels가 의도대로 설정되지 않음", "set_target 호출 결과를 로그로 재확인"]
+    ]
+  },
+  "checkQuestions": {
+    "headers": ["문항", "질문", "답"],
+    "rows": [
+      ["1", "object_sorting은 YOLO를 쓰는가, 다른 방식으로 물체를 찾는가?", "<input type=\"text\"/>"],
+      ["2", "go_home()의 elif 체인이 왜 \"bule\"이 아닌 목표에 대해서는 절대 실행되지 않는가?", "<input type=\"text\"/>"],
+      ["3", "이 버그가 실제 로봇 동작에는 문제를 일으키지 않는 이유는 무엇인가?", "<input type=\"text\"/>"]
+    ]
+  },
+  "advancedTask": "go_home()의 오타(\"bule\"→\"blue\")와 elif 구조를 직접 고쳐서 순수 if 3개로 바꿔보세요. 고친 버전과 원본이 실제 로봇 동작에서 다르게 보이는지(t가 원래 안 쓰이므로 겉보기엔 차이가 없을 수 있음) 확인해보고 그 이유를 설명해보세요.",
+  "photoBlockHtml": null,
+  "prerequisites": [
+    {
+      "topic": "동차좌표(homogeneous coordinates) 정의와 카메라 투영 연결",
+      "url": "https://gaussian37.github.io/vision-concept-homogeneous_coordinate/",
+      "focus": "글 도입부(동차좌표 정의·수학적 표현)와 후반부 '카메라 projection과의 관계' 부분 위주로 — 중간의 세부 파생 공식은 건너뛰어도 무방",
+      "source": "gaussian37 블로그 (Computer Vision 전문 블로그, 한국어)",
+      "verifiedAt": "2026-09-09"
+    }
+  ],
+  "theoryDeepDive": {
+    "title": "픽셀 좌표에서 로봇 좌표로 — 카메라 좌표 변환의 원리",
+    "content": [
+      "카메라가 보는 것은 2D 픽셀 좌표(x, y)뿐이지만, 로봇팔은 3D 실세계 좌표(x, y, z, 단위: m)로 움직여야 한다. 이 변환에는 카메라 내부 파라미터(intrinsic — 초점거리·주점 등, camera_info 토픽에서 얻음)와 외부 파라미터(extrinsic — 카메라가 로봇 기준으로 어디에 어떤 각도로 달려있는지)가 모두 필요하다.",
+      "동차좌표(homogeneous coordinates)는 3D 좌표에 1을 하나 더 붙여([x, y, z, 1]) 회전과 이동(translation)을 하나의 행렬 곱셈으로 한 번에 표현하는 방법이다 — 이 소스코드의 projection_matrix가 바로 회전(extristric[1])과 이동(extristric[0])을 하나로 합친 동차변환행렬이다.",
+      "이런 계산을 매 프레임 새로 하지 않고 calibration_*.yaml 파일에 미리 보정된 값(offset·scale)을 저장해두고 재사용하는 이유는, 카메라·로봇팔의 위치 관계가 조립 후에는 거의 바뀌지 않는 고정값이기 때문이다 — 한 번 정밀하게 캘리브레이션해두면 매번 다시 계산할 필요가 없다."
+    ]
+  },
+  "sortOrder": 13
+}

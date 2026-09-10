@@ -1,0 +1,224 @@
+{
+  "id": "03-2",
+  "key": "wheel",
+  "title": "03-2. 바퀴 전방향 테스트 — 전진(forward)·평행이동(lateral translation)·회전(rotation) 모두 확인하기",
+  "moduleTime": "1시간 (실습 + 결과기록 포함)",
+  "prereq": "03-1. 첫 이동 명령",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": [
+    "jeondae",
+    "daehak"
+  ],
+  "objectives": [
+    "Twist 메시지의 linear.x·linear.y·angular.z를 조합해 로봇을 여러 방향으로 움직일 수 있다.",
+    "각 축의 부호(+/-)가 실제로 어느 방향에 대응하는지 직접 실험으로 확인하고 기록할 수 있다.",
+    "전진·후진·좌우 평행이동·좌우회전 6가지 이동을 모두 시도하고 결과를 기록으로 남길 수 있다."
+  ],
+  "knowledge": [
+    "ROSOrin Pro는 메카넘 휠 구동이라 일반 바퀴와 달리 옆으로 평행이동도 가능하다 — 바퀴 롤러가 45도로 붙어있어 네 바퀴 조합으로 이런 움직임이 나온다. (공식 매뉴얼 2.2절)",
+    "<code>/controller/cmd_vel</code> 토픽(<code>geometry_msgs/Twist</code>)의 <code>linear.x</code>(전후진)·<code>linear.y</code>(좌우 평행이동)·<code>angular.z</code>(회전)를 조합해 발행한다.",
+    "확인된 값: <code>linear.x</code> 권장 범위 −0.6~0.6 m/s, <code>angular.z</code>는 양수면 좌회전(반시계) 음수면 우회전(시계방향)이다. (공식 매뉴얼 2.1.5절)",
+    "<code>linear.y</code>의 부호가 실제로 좌/우 중 어느 쪽인지는 공식 문서에 명시돼 있지 않다 — 이번 실습에서 직접 테스트하고 기록하는 것 자체가 학습 목표다.",
+    "03-1에서 배운 반복 발행(repeated publish) 원칙(<code>--once</code> 유실 방지)이 여기에도 동일하게 적용된다."
+  ],
+  "materials": {
+    "재료·자료": "없음 (소프트웨어 실습)",
+    "기기(장비·공구)": "ROSOrin Pro, 전후좌우 대각선 포함 1.5m 이상 여유공간"
+  },
+  "safety": [
+    "실습 전 로봇 전후좌우(대각선 포함) 1.5m 이상 공간을 확보한다.",
+    "모든 테스트는 저속(0.2 m/s 이하)으로 시작한다.",
+    "정지 명령도 1회성이 아닌 반복 발행으로 보낸다.",
+    "대각선 이동(전진+평행이동 동시)은 더 넓은 공간에서 마지막에 시도한다."
+  ],
+  "procedure": {
+    "headers": [
+      "순번",
+      "절차",
+      "판정기준"
+    ],
+    "rows": [
+      [
+        "1",
+        "전진(linear.x=+0.2) → 후진(linear.x=−0.2) 테스트",
+        "앞/뒤로 직진 이동"
+      ],
+      [
+        "2",
+        "linear.y=+0.2로 평행이동 테스트 → 실제 방향(좌/우) 관찰",
+        "옆으로 이동, 방향 기록"
+      ],
+      [
+        "3",
+        "linear.y=−0.2로 반대 방향 평행이동 테스트",
+        "반대쪽으로 이동 확인"
+      ],
+      [
+        "4",
+        "angular.z=+0.3(좌회전(turn left, CCW)) → −0.3(우회전) 테스트",
+        "제자리에서 회전"
+      ],
+      [
+        "5",
+        "linear.x+linear.y 동시 입력으로 대각선 이동 테스트",
+        "대각선 방향으로 이동"
+      ],
+      [
+        "6",
+        "결과 기록표 작성",
+        "6개 이동 유형 모두 기록"
+      ]
+    ]
+  },
+  "code": "#!/usr/bin/env python3\nimport time\nimport rclpy\nfrom rclpy.node import Node\nfrom geometry_msgs.msg import Twist\n\nclass WheelTest(Node):\n    def __init__(self):\n        super().__init__('wheel_test')\n        self.pub = self.create_publisher(Twist, '/controller/cmd_vel', 1)\n\n    def move(self, vx=0.0, vy=0.0, wz=0.0, seconds=2.0):\n        twist = Twist()\n        twist.linear.x = vx\n        twist.linear.y = vy\n        twist.angular.z = wz\n        end = time.time() + seconds\n        while time.time() < end:\n            self.pub.publish(twist)   # 반복 발행 — --once 유실 방지\n            time.sleep(0.1)\n        self.pub.publish(Twist())     # 정지도 발행으로\n\ndef main():\n    rclpy.init()\n    node = WheelTest()\n    node.move(vx=0.2, seconds=2.0)             # 1. 전진\n    time.sleep(1.0)\n    node.move(vy=0.2, seconds=2.0)             # 2. 평행이동(방향은 관찰해서 기록)\n    time.sleep(1.0)\n    node.move(wz=0.3, seconds=2.0)             # 4. 회전\n    rclpy.shutdown()\n\nif __name__ == '__main__':\n    main()",
+  "codeTip": "<b>수행 Tip</b> — 한 번에 다 시도하지 말고, 위 표의 순서대로 하나씩 실행하고 바로 기록한다. <code>move()</code> 함수의 인자만 바꿔가며 반복 호출하면 된다.",
+  "recordTable": {
+    "headers": [
+      "시도",
+      "이동 유형",
+      "입력값(vx, vy, wz)",
+      "실제 관찰된 방향",
+      "판정"
+    ],
+    "rows": [
+      [
+        "1",
+        "전진",
+        "<input type=\"text\" value=\"0.2, 0, 0\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "2",
+        "후진",
+        "<input type=\"text\" value=\"-0.2, 0, 0\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "3",
+        "평행이동(+y)",
+        "<input type=\"text\" value=\"0, 0.2, 0\"/>",
+        "<input placeholder=\"좌/우 중 실제로 관찰된 방향\" type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "4",
+        "평행이동(−y)",
+        "<input type=\"text\" value=\"0, -0.2, 0\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "5",
+        "좌/우회전",
+        "<input type=\"text\" value=\"0, 0, ±0.3\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ],
+      [
+        "6",
+        "대각선 이동",
+        "<input type=\"text\"/>",
+        "<input type=\"text\"/>",
+        "<input placeholder=\"성공/실패\" type=\"text\"/>"
+      ]
+    ]
+  },
+  "recordNote": "linear.y의 실제 부호-방향 대응, 대각선 이동 시 속도 감소 여부 등을 자유롭게 기록",
+  "evaluation": {
+    "headers": [
+      "평가준거",
+      "평가방법",
+      "피드백 방법"
+    ],
+    "rows": [
+      [
+        "6가지 이동 유형을 모두 시도했는가",
+        "실습 관찰",
+        "재시도 안내"
+      ],
+      [
+        "linear.y 부호-방향 대응을 스스로 확인해 기록했는가",
+        "기록 확인",
+        "보완 요청"
+      ],
+      [
+        "반복 발행 원칙을 코드에 적용했는가",
+        "코드 리뷰",
+        "즉시 교정 지도"
+      ]
+    ]
+  },
+  "advanced": [
+    "메카넘 휠(mecanum wheel) 4개는 각각 다른 방향의 대각선 롤러를 가진다 — 네 바퀴를 같은 방향으로 돌리면 전진, 대각선 방향으로 짝을 지어 다르게 돌리면 평행이동(lateral translation)이 나온다. \"네 바퀴 회전 속도의 조합\"이 곧 로봇의 최종 이동 방향을 결정한다.",
+    "대각선 이동은 vx와 vy를 동시에 넣는 것이라 각 바퀴에 걸리는 부하가 순수 전진·평행이동보다 커서, 실제 속도가 이론값보다 느려질 수 있다."
+  ],
+  "troubleshooting": {
+    "headers": [
+      "증상",
+      "원인",
+      "해결"
+    ],
+    "rows": [
+      [
+        "평행이동 시 로봇이 살짝 회전(rotation)하며 이동함",
+        "바퀴 캘리브레이션 편차 또는 무게중심 치우침",
+        "공식 매뉴얼 1.7절 속도 캘리브레이션 절차 참고"
+      ],
+      [
+        "대각선 이동이 잘 안 됨",
+        "vx·vy 값이 너무 작아 마찰을 못 이김",
+        "두 값을 각각 조금씩 키워서 재시도"
+      ],
+      [
+        "회전 시 제자리에서 안 돌고 이동하며 돎",
+        "angular.z만 넣었는데 이전 linear 값이 남아있음",
+        "매번 새 Twist() 객체를 생성해서 사용"
+      ]
+    ]
+  },
+  "checkQuestions": {
+    "headers": [
+      "문항",
+      "질문",
+      "답"
+    ],
+    "rows": [
+      [
+        "1",
+        "메카넘 휠이 일반 바퀴와 다른 점은 무엇인가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "2",
+        "대각선 이동은 어떤 값들의 조합으로 만들어지는가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "3",
+        "왜 대각선 이동을 가장 마지막, 가장 넓은 공간에서 시도하라고 했는가?",
+        "<input type=\"text\"/>"
+      ]
+    ]
+  },
+  "advancedTask": "vx·vy·wz 세 값을 동시에 조합해서 \"회전하면서 전진\"하는 나선형 경로를 만들어보세요.",
+  "photoBlockHtml": "<div class=\"wheel-photo-wrap\"><div class=\"wheel-photo-pair\"><div class=\"wheel-photo-item\"><div aria-label=\"메카넘 휠 실물 사진에 전진 방향 회전을 나타내는 빨간 화살표가 표시됨\" class=\"wheel-photo wheel-photo-fwd\" role=\"img\"></div><span class=\"wheel-photo-tag\">전진(forward) 회전</span></div><div class=\"wheel-photo-item\"><div aria-label=\"메카넘 휠 실물 사진에 후진 방향 회전을 나타내는 빨간 화살표가 표시됨\" class=\"wheel-photo wheel-photo-bwd\" role=\"img\"></div><span class=\"wheel-photo-tag\">후진(backward) 회전</span></div></div><p class=\"wheel-photo-cap\"><b>바퀴 회전 방향 ↔ 로봇 진행 방향</b> — 네 바퀴 모두 사진과 같은 방향으로 돌면(왼쪽) 로봇은 앞으로, 반대 방향으로 돌면(오른쪽) 뒤로 갑니다. 이 관계는 명확합니다. 반면 <b>평행이동(lateral translation)이나 제자리 회전(rotation)은 바퀴마다 서로 다른 방향으로 돌아야 나오는 조합 동작</b>이라, 어떤 바퀴가 어느 방향으로 돌아야 어느 쪽으로 가는지는 로봇마다·문서마다 표기가 갈릴 수 있어 여기서 단정하지 않았습니다 — 오늘 실습에서 <code>linear.y</code>·<code>angular.z</code>를 직접 넣어보고 실제 방향을 관찰·기록하는 것이 바로 이 부분을 확인하는 과정입니다.</p></div>",
+  "prerequisites": [
+    {
+      "topic": "메카넘 휠 역기구학(수식 유도)",
+      "url": "https://ecam-eurobot.github.io/Tutorials/mechanical/mecanum.html",
+      "focus": "페이지 중반 'Inverse kinematics' 섹션만 보면 됨 — vx·vy·ω를 4개 바퀴 속도로 바꾸는 행렬식과 대각선 이동 계산 예시가 나옴. 앞부분(휠 구조 설명)은 건너뛰어도 무방",
+      "source": "Ecam Eurobot (로봇 경진대회 팀의 오픈 튜토리얼, 영문)",
+      "verifiedAt": "2026-09-09"
+    }
+  ],
+  "theoryDeepDive": {
+    "title": "메카넘 휠 역기구학(inverse kinematics)",
+    "content": [
+      "일반적인 메카넘 휠 로봇에서, 로봇이 원하는 속도(vx: 전진, vy: 평행이동, ω: 회전)를 네 바퀴의 개별 회전속도로 변환하는 공식은 흔히 다음과 같은 형태를 갖는다: v1=vx−vy−ω(lx+ly), v2=vx+vy+ω(lx+ly), v3=vx+vy−ω(lx+ly), v4=vx−vy+ω(lx+ly) (lx·ly는 바퀴 중심과 로봇 중심 사이의 가로·세로 거리). 이 로봇의 정확한 하위 컨트롤러 구현(펌웨어)이 이 공식을 그대로 쓰는지는 이번 세션에서 직접 확인하지 못했다 — ROS2 계층에서는 <code>/controller/cmd_vel</code>에 vx·vy·ω만 넘기면 그 이후 변환은 하위 컨트롤러가 담당한다.",
+      "이 공식이 왜 필요한가 — 일반 바퀴(디퍼렌셜 드라이브)는 vy(옆으로 이동)를 만들 방법이 아예 없다. 메카넘 휠의 롤러가 45도로 붙어있어서 네 바퀴 회전속도의 조합만으로 vy 성분을 만들어낼 수 있는 것이다. 이번 실습에서 linear.y 부호를 직접 실험으로 확인한 것이 바로 이 역기구학 결과를 몸으로 검증한 것이다."
+    ]
+  },
+  "sortOrder": 4
+}

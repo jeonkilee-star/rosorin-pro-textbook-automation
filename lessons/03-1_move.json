@@ -1,0 +1,142 @@
+{
+  "id": "03-1",
+  "key": "move",
+  "title": "03-1. 첫 이동 명령 — cmd_vel로 로봇 움직이기",
+  "moduleTime": "1시간 (실습 포함)",
+  "prereq": "02. ROS2 기초",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": [
+    "jeondae",
+    "daehak"
+  ],
+  "objectives": [
+    "Twist 메시지의 구조(linear.x, angular.z)를 이해하고 로봇을 전진(forward)·회전(rotation)시킬 수 있다.",
+    "1회성 명령 발행이 유실될 수 있는 이유를 알고, 안전한 반복 발행(repeated publish) 방식을 적용할 수 있다."
+  ],
+  "knowledge": [
+    "<code>/controller/cmd_vel</code> 토픽에 <code>geometry_msgs/Twist</code> 메시지를 발행하면 로봇이 움직인다.",
+    "<code>linear.x</code>는 전후진(backward) 속도(m/s), <code>angular.z</code>는 회전 속도(rad/s)다.",
+    "새로 실행한 퍼블리셔에서 <code>--once</code>(1회성) 발행은 구독자와 매칭되기 전에 유실될 수 있음이 실측으로 확인됐다(정지·그리퍼(gripper) 명령 모두 재현). 반드시 반복 발행 방식을 쓴다."
+  ],
+  "materials": {
+    "재료·자료": "없음 (소프트웨어 실습)",
+    "기기(장비·공구)": "ROSOrin Pro, 전후좌우 1.5m 이상 빈 공간"
+  },
+  "safety": [
+    "실습 전 로봇 주변 1.5m 이상 공간을 확보한다.",
+    "정지 명령도 1회성이 아닌 반복 발행으로 보낸다.",
+    "처음에는 저속(0.2m/s 이하)으로 시작한다."
+  ],
+  "procedure": {
+    "headers": [
+      "순번",
+      "절차",
+      "판정기준"
+    ],
+    "rows": [
+      [
+        "1",
+        "CLI로 반복 발행 체험: <code>ros2 topic pub -r 10 /controller/cmd_vel ...</code>",
+        "로봇이 전진함"
+      ],
+      [
+        "2",
+        "Ctrl+C 후 별도로 정지 명령(0,0) 발행",
+        "로봇이 완전히 정지함"
+      ],
+      [
+        "3",
+        "<code>first_move.py</code> 작성 (아래 코드) — 5초 전진 후 정지",
+        "코드 저장 완료"
+      ],
+      [
+        "4",
+        "실행 후 관찰",
+        "5초간 전진 후 정지"
+      ]
+    ]
+  },
+  "code": "#!/usr/bin/env python3\nimport time, rclpy\nfrom rclpy.node import Node\nfrom geometry_msgs.msg import Twist\n\nclass FirstMove(Node):\n    def __init__(self):\n        super().__init__('first_move')\n        self.pub = self.create_publisher(Twist, '/controller/cmd_vel', 1)\n\n    def move_forward(self, seconds=5.0, speed=0.2):\n        twist = Twist(); twist.linear.x = speed\n        end = time.time() + seconds\n        while time.time() < end:\n            self.pub.publish(twist)   # 반복 발행 — --once 유실 방지\n            time.sleep(0.1)\n        self.pub.publish(Twist())     # 정지도 발행으로\n\ndef main():\n    rclpy.init()\n    FirstMove().move_forward()\n    rclpy.shutdown()\n\nif __name__ == '__main__':\n    main()",
+  "codeTip": "<b>수행 Tip</b> — 실행 중 Ctrl+C로 강제 종료하면 마지막 발행값이 유지된 채 로봇이 계속 움직일 수 있다. 항상 정지 코드까지 실행되게 한다.",
+  "recordTable": null,
+  "recordNote": null,
+  "evaluation": {
+    "headers": [
+      "평가준거",
+      "평가방법",
+      "피드백 방법"
+    ],
+    "rows": [
+      [
+        "Twist 메시지 구조를 설명할 수 있는가",
+        "구두 확인",
+        "보충 설명"
+      ],
+      [
+        "로봇이 지시한 방향·시간대로 움직였는가",
+        "실습 관찰",
+        "재시도 안내"
+      ],
+      [
+        "반복 발행이 필요한 이유를 서술할 수 있는가",
+        "서술형 확인",
+        "구두 피드백"
+      ]
+    ]
+  },
+  "advanced": [
+    "Twist 메시지는 linear(x,y,z)·angular(x,y,z) 총 6개 값을 갖지만, 지상 바퀴로봇은 보통 linear.x·linear.y·angular.z 3개만 쓴다 — z축 이동이나 x/y축 회전은 물리적으로 불가능하기 때문이다.",
+    "퍼블리셔의 큐 크기(<code>create_publisher</code> 세 번째 인자)는 메시지가 밀릴 때 몇 개까지 버퍼링할지 정한다. 이동 제어처럼 \"최신 값만 중요한\" 경우 작게(1) 유지하는 게 일반적이다."
+  ],
+  "troubleshooting": {
+    "headers": [
+      "증상",
+      "원인",
+      "해결"
+    ],
+    "rows": [
+      [
+        "<code>--once</code>로 보냈는데 로봇이 안 움직임",
+        "발행이 구독자와 매칭되기 전에 유실(실측 확인된 버그)",
+        "<code>-r 10</code>으로 반복 발행"
+      ],
+      [
+        "코드 실행 후 로봇이 계속 움직임(안 멈춤)",
+        "정지 코드가 실행되지 않고 프로그램이 강제 종료됨",
+        "try/finally로 정지 코드 실행을 보장"
+      ],
+      [
+        "속도값을 크게 줬는데 이상하게 움직임",
+        "권장 범위(−0.6~0.6 m/s) 초과",
+        "범위 내 값으로 조정"
+      ]
+    ]
+  },
+  "checkQuestions": {
+    "headers": [
+      "문항",
+      "질문",
+      "답"
+    ],
+    "rows": [
+      [
+        "1",
+        "<code>--once</code>가 유실될 수 있는 이유는 무엇인가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "2",
+        "linear.x가 음수면 로봇은 어떻게 움직이는가?",
+        "<input type=\"text\"/>"
+      ],
+      [
+        "3",
+        "정지 명령도 반복 발행해야 하는 이유는 무엇인가?",
+        "<input type=\"text\"/>"
+      ]
+    ]
+  },
+  "advancedTask": "<code>move_forward</code> 함수를 확장해서 \"사각형 경로로 주행하기\"(전진 → 회전(rotation) 90도 → 이 과정을 4회 반복)를 구현해보세요.",
+  "photoBlockHtml": null,
+  "sortOrder": 3
+}

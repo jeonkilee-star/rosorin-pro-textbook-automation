@@ -1,0 +1,84 @@
+{
+  "id": "16-1",
+  "key": "self_driving",
+  "title": "16-1. 자율주행 통합 — 차선·신호등·표지판을 하나의 판단으로 묶기",
+  "moduleTime": "2시간 (실습 + 결과기록 포함)",
+  "prereq": "10-1. YOLO 물체 인식",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": ["jeondae", "daehak"],
+  "objectives": [
+    "self_driving 앱이 06-1(라인트레이싱)의 3-스캔라인 가중치 알고리즘과 10-1(YOLO)의 'traffic' 모델(6개 클래스: go·right·park·red·green·crosswalk)을 그대로 재사용해서 조합한다는 것을 확인할 수 있다.",
+    "횡단보도까지의 거리를 y축 픽셀 값으로 근사하고, 여러 하드코딩된 임계값(160·225·300·365)을 적용해 감속·정지·주차 시점을 판단하는 방식을 설명할 수 있다.",
+    "빨간불이 \"가까이\" 있을 때만(박스 면적>700) 정지하고 너무 멀면 무시하는 실제 로직을 확인하고 그 이유를 추론할 수 있다.",
+    "우회전 표지 감지 시 이진화 이미지에 \"가상 유도선\"을 그려 넣어 차선 추종 알고리즘이 자연스럽게 회전하도록 유도하는 트릭을 이해한다."
+  ],
+  "knowledge": [
+    "self_driving은 새 인식 로직을 만들지 않는다 — lane_detect.LaneDetector(06-1과 동일한 3-스캔라인 가중치 0.7·0.2·0.1 방식)로 차선을, yolo 앱의 'traffic' 모델(classes=['go','right','park','red','green','crosswalk'])로 표지판·신호등을 인식한다. (소스: <code>SelfDrivingNode.__init__</code>의 <code>self.lane_detect</code>, <code>self.classes</code>)",
+    "횡단보도까지의 \"거리\"는 실제 미터 단위가 아니라 화면에서 횡단보도가 차지하는 y축 픽셀 위치(crosswalk_distance)로 근사한다 — 이 값이 300을 넘으면(3프레임 연속 확인 후) 감속을 시작하고, 225를 넘으면 주차를 시작하고, 365를 넘으면 우회전 전략을 활성화한다. 전부 실측으로 튜닝된 하드코딩 임계값이다. (소스: <code>main()</code> 353~410행)",
+    "빨간불이 감지되어도 무조건 정지하지 않는다 — 신호등 박스의 픽셀 면적이 700을 넘을 때만(화면에 충분히 크게 보일 때만, 즉 충분히 가까울 때만) 정지한다. 너무 멀리서 보이는 빨간불은 오히려 무시하는 것으로, 오탐지·과도하게 이른 정지를 막기 위한 설계로 보인다. (소스: <code>if self.traffic_signs_status.class_name == 'red' and area > 700</code>)",
+    "우회전 표지가 확인되면, 차선 인식 알고리즘 자체를 속이는 트릭을 쓴다 — 이진화된 차선 이미지 위에 흰색 \"가상 선(virtual line)\"을 그려 넣어서, 원래 라인트레이싱 로직이 이 가상선을 실제 차선처럼 따라가게 만들어 부드럽게 회전하도록 유도한다. (소스: <code>cv2.line(binary_image, (min_x, y-60), (w, y-60), (255,255,255), 50)</code>)"
+  ],
+  "materials": {
+    "재료·자료": "신호등·표지판 인쇄물(go·right·park·red·green·crosswalk), 라인트레이싱용 노란 선 트랙",
+    "기기(장비·공구)": "ROSOrin Pro"
+  },
+  "safety": [
+    "로봇이 자율로 주행하므로 트랙 주변 충분한 공간을 확보하고 즉시 정지시킬 수 있도록 대기한다.",
+    "처음엔 문제가 생기면 바로 set_running(false)을 호출할 수 있게 명령을 미리 준비해둔다."
+  ],
+  "procedure": {
+    "headers": ["순번", "절차", "판정기준"],
+    "rows": [
+      ["1", "enter → set_running(true)로 자율주행 시작, 노란 선 트랙을 정상 주행하는지 확인", "차선 추종 주행"],
+      ["2", "빨간불 표지판을 트랙 위 먼 지점에 놓기 → 로봇이 무시하고 계속 가는지 관찰(면적<700 예상)", "정지하지 않음"],
+      ["3", "빨간불 표지판을 가까이(로봇 진행 방향 바로 앞) 놓기 → 정지하는지 관찰(면적>700 예상)", "정지함"],
+      ["4", "횡단보도 표지 + park 표지를 함께 배치 → 감속 후 주차 동작이 실행되는지 관찰", "주차 동작 실행"],
+      ["5", "우회전 표지를 곡선 구간 앞에 배치 → 자연스럽게 우회전하는지 관찰", "우회전 성공"],
+      ["6", "결과 기록표 작성", "5가지 케이스 모두 기록"]
+    ]
+  },
+  "code": "ros2 service call /self_driving/enter std_srvs/srv/Trigger {}\n\nros2 service call /self_driving/set_running std_srvs/srv/SetBool \"{data: true}\"\n\n# 문제 발생 시 즉시 정지\nros2 service call /self_driving/set_running std_srvs/srv/SetBool \"{data: false}\"",
+  "codeTip": "<b>수행 Tip</b> — 2·3단계는 같은 빨간불 표지판을 거리만 다르게 놓고 비교하는 것이 핵심이다. 표지판 크기·카메라 거리에 따라 면적 700의 기준 거리가 달라지니, 먼저 손으로 표지판을 천천히 가까이 가져가며 어느 지점에서 정지하는지 감을 잡아본다.",
+  "recordTable": {
+    "headers": ["시도", "상황", "예상 동작", "실제 동작", "판정"],
+    "rows": [
+      ["1", "먼 빨간불", "<input type=\"text\" placeholder=\"무시하고 주행\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["2", "가까운 빨간불", "<input type=\"text\" placeholder=\"정지\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["3", "초록불", "<input type=\"text\" placeholder=\"감속 후 통과\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["4", "횡단보도+park 표지", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["5", "우회전 표지", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"]
+    ]
+  },
+  "recordNote": "빨간불 정지 거리(면적 700 기준)가 체감상 몇 cm 정도였는지, 우회전이 부드러웠는지 서술",
+  "evaluation": {
+    "headers": ["평가준거", "평가방법", "피드백 방법"],
+    "rows": [
+      ["06-1·10-1의 알고리즘이 이 앱에 재사용된다는 것을 설명할 수 있는가", "구술 확인", "06-1·10-1 재비교 안내"],
+      ["빨간불 거리 조건(area>700)을 실습으로 확인했는가", "실습 관찰", "재시도 안내"],
+      ["우회전 가상선 트릭의 원리를 소스코드 근거로 설명할 수 있는가", "코드 리뷰 결과 확인", "재검토 지도"]
+    ]
+  },
+  "advanced": [
+    "이 lane_detect의 3-스캔라인 가중치(0.7·0.2·0.1)는 06-1의 line_following과 동일한 설계 원칙을 공유한다 — 같은 프로젝트 안에서 \"라인 추종\"이라는 핵심 알고리즘 하나를 여러 앱(line_following, self_driving)이 재사용하고 있음을 확인할 수 있다.",
+    "<code>park_action()</code>은 로봇 조향 방식(Mecanum·Ackermann·기타)마다 완전히 다른 3가지 주차 동작 시퀀스를 갖고 있다 — 메카넘은 옆으로 미끄러져 들어가고, Ackermann은 전후진을 반복하는 3점 주차(3-point turn)에 가까운 동작을 한다."
+  ],
+  "troubleshooting": {
+    "headers": ["증상", "원인", "해결"],
+    "rows": [
+      ["빨간불을 봐도 안 멈춤", "신호등 박스 면적이 700 이하 — 아직 너무 멀리 있는 것으로 판단됨", "표지판을 더 가까이 배치하거나 크게 인쇄"],
+      ["횡단보도에서 감속을 아예 안 함", "count_crosswalk가 3에 도달하기 전에 표지가 화면에서 사라짐(3프레임 연속 조건)", "표지판이 화면에 안정적으로 계속 보이도록 각도·거리 조정"],
+      ["우회전이 너무 급격하거나 안 됨", "가상선의 y 위치(y-60)가 트랙 폭·속도와 안 맞음", "심화 과제처럼 관련 상수를 조정해 재시도"]
+    ]
+  },
+  "checkQuestions": {
+    "headers": ["문항", "질문", "답"],
+    "rows": [
+      ["1", "self_driving이 차선·표지판을 인식할 때 새로운 인식 알고리즘을 만드는가, 기존 것을 재사용하는가?", "<input type=\"text\"/>"],
+      ["2", "빨간불을 봤는데도 로봇이 멈추지 않는 경우는 언제인가?", "<input type=\"text\"/>"],
+      ["3", "우회전 표지를 감지했을 때 로봇은 실제로 어떤 트릭으로 회전을 유도하는가?", "<input type=\"text\"/>"]
+    ]
+  },
+  "advancedTask": "빨간불 정지 판단 기준(area>700)을 다른 값으로 바꿔서, 로봇이 더 멀리서 또는 더 가까이서 정지하도록 튜닝해보고 트랙과의 적정 거리를 찾아보세요.",
+  "photoBlockHtml": null,
+  "sortOrder": 15
+}

@@ -1,0 +1,99 @@
+{
+  "id": "10-1",
+  "key": "yolo",
+  "title": "10-1. YOLO 물체 인식 — 모델 이름 하나가 클래스 목록과 검출 방식을 함께 정한다",
+  "moduleTime": "1시간 (실습 + 결과기록 포함)",
+  "prereq": "07-1. 물체 색상 추적",
+  "moduleName": "ROSOrin Pro 활용 자율주행 로봇 프로그래밍",
+  "tracks": ["jeondae", "daehak"],
+  "objectives": [
+    "yolo 앱이 /yolo/start·/yolo/stop 단 2개의 서비스만으로 제어된다는 것을 line_following·object_tracking의 4개 서비스 패턴과 비교해 설명할 수 있다.",
+    "launch 파일의 model_name 파라미터 하나가 클래스 이름 목록과 검출 방식(detect/obb)을 동시에 결정하는 구조를 이해하고, 실제로 다른 model_name으로 실행해 차이를 관찰할 수 있다.",
+    "conf(신뢰도 임계값) 파라미터를 바꿔가며 오탐지·미탐지가 어떻게 달라지는지 실습으로 확인할 수 있다.",
+    "ObjectsInfo 메시지에 담기는 정보(class_name·score·box·angle)를 직접 echo해서 확인할 수 있다."
+  ],
+  "knowledge": [
+    "<code>yolo_node.py</code>는 <code>/yolo/start</code>·<code>/yolo/stop</code> 단 2개의 Trigger 서비스만 제공한다 — line_following·object_tracking의 enter/set_target_color/set_running/exit 4종 패턴과 다르다. (소스: <code>YoloNode.__init__</code>의 create_service 2줄)",
+    "launch 파일(<code>yolo_detect.launch.py</code>)에서 model_name에 'garbage'가 들어있으면 12개 쓰레기 분류 클래스 + obb(회전된 박스) 방식, 'traffic'이 들어있으면 6개 신호·표지 클래스 + detect(일반 박스) 방식, 그 외엔 COCO 80개 클래스 + detect 방식이 자동으로 선택된다 — 모델 이름 문자열 하나로 클래스 목록과 검출 방식이 함께 정해진다. (소스: <code>yolo_detect.launch.py</code>의 <code>model_name</code> 분기)",
+    "conf(신뢰도 임계값) 기본값은 0.6이다 — YOLO가 이 값 이상 확신하는 검출 결과만 ObjectsInfo로 발행한다. (소스: launch 파일의 <code>conf</code> 기본값)",
+    "<code>~/yolo_start_detect</code> 서비스는 프로그램 시작과 동시에 만들어지지 않는다 — <code>/yolo/start</code>가 호출되고 카메라 프레임이 최소 1장 처리된 뒤에야 image_proc 루프 안에서 생성된다. \"서비스 목록에 아직 안 보인다\"가 곧 오류는 아니라는 것을 소스코드로 확인할 수 있다. (소스: <code>image_proc</code> 안의 <code>if not self.yolo_detet_flag: self.create_service(...)</code>)"
+  ],
+  "materials": {
+    "재료·자료": "인식시킬 물체(COCO 클래스에 있는 것 — 예: 병·컵·휴대폰)",
+    "기기(장비·공구)": "ROSOrin Pro, 카메라 스트림 확인용 PC/브라우저"
+  },
+  "safety": [
+    "이번 레슨은 로봇이 움직이지 않는다 — 인식 결과만 확인한다.",
+    "인식률을 정상적으로 비교하려면 밝은 조명에서 진행한다."
+  ],
+  "procedure": {
+    "headers": ["순번", "절차", "판정기준"],
+    "rows": [
+      ["1", "yolo_detect.launch.py를 기본값(model_name=yolo26n)으로 실행 → /yolo/start 호출", "서비스 응답 success"],
+      ["2", "카메라에 COCO 클래스 물체(병·컵·휴대폰 등)를 비춰 결과 화면에 박스가 그려지는지 확인", "박스·클래스명 표시"],
+      ["3", "ros2 topic echo ~/object_detect로 class_name·score 값 직접 확인", "메시지 정상 수신"],
+      ["4", "conf 값을 낮춰(예: 0.3) 재실행 → 오탐지(엉뚱한 물체 검출)가 느는지 관찰", "오탐지 빈도 비교"],
+      ["5", "model_name을 traffic으로 바꿔 재실행 → 클래스 목록이 6개로 바뀌는지 확인", "go/right/park/red/green/crosswalk만 표시"],
+      ["6", "결과 기록표 작성", "3가지 설정 모두 기록"]
+    ]
+  },
+  "code": "ros2 launch example yolo_detect.launch.py conf:=0.6 model_name:=yolo26n\n\nros2 service call /yolo/start std_srvs/srv/Trigger {}\n\nros2 topic echo /yolo/object_detect\n\n# conf를 낮춰 재실행 (오탐지 비교용)\nros2 launch example yolo_detect.launch.py conf:=0.3 model_name:=yolo26n\n\n# 클래스 목록·검출 방식이 함께 바뀌는지 확인\nros2 launch example yolo_detect.launch.py model_name:=traffic",
+  "codeTip": "<b>수행 Tip</b> — 5단계에서 model_name을 바꿀 때마다 launch를 완전히 재시작해야 한다. classes·task는 노드가 시작할 때 파라미터로 한 번만 읽히고 실행 중에는 바뀌지 않는다(소스코드에 실시간 변경 서비스가 없음).",
+  "recordTable": {
+    "headers": ["시도", "설정(model_name / conf)", "인식 시도 물체", "실제 결과(class_name·score)", "판정"],
+    "rows": [
+      ["1", "yolo26n / 0.6", "<input type=\"text\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["2", "yolo26n / 0.3", "<input type=\"text\" placeholder=\"1번과 동일한 물체\"/>", "<input type=\"text\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"],
+      ["3", "traffic / 0.6", "<input type=\"text\"/>", "<input type=\"text\" placeholder=\"클래스 목록이 6개로 줄었는지\"/>", "<input placeholder=\"성공/실패\" type=\"text\"/>"]
+    ]
+  },
+  "recordNote": "conf를 낮췄을 때 오탐지가 실제로 늘었는지, model_name에 따라 클래스 목록·검출 방식이 어떻게 달라졌는지 소스코드 근거와 함께 서술",
+  "evaluation": {
+    "headers": ["평가준거", "평가방법", "피드백 방법"],
+    "rows": [
+      ["yolo 앱의 서비스 구조가 다른 앱과 다르다는 것을 설명할 수 있는가", "구술 확인", "코드 재검토 지도"],
+      ["model_name 변경이 클래스·검출방식에 미치는 영향을 실습으로 확인했는가", "실습 관찰", "재시도 안내"],
+      ["conf 값과 오탐지·미탐지 관계를 설명할 수 있는가", "기록 확인", "재관찰 안내"]
+    ]
+  },
+  "advanced": [
+    "OBB(oriented bounding box, 회전된 박스)와 일반 박스(detect)는 저장하는 좌표 형식부터 다르다 — obb는 중심좌표·너비·높이·회전각(xywhr)을, detect는 좌상단·우하단 좌표(xyxy)를 사용한다. 쓰레기 분류처럼 물체가 기울어져 놓일 수 있는 경우에만 obb를 쓰는 이유가 여기 있다. (소스: <code>yolo_node.py</code>의 <code>is_obb_task</code> 분기)",
+    "class_name은 classes 리스트에서 class_id로 찾아오는데, 모델이 classes 리스트보다 많은 클래스로 학습되어 있었다면 \"ID:숫자\" 형태로 표시된다(코드의 fallback) — launch 파일의 클래스 이름 목록이 실제 모델과 정확히 일치해야 사람이 읽을 수 있는 이름이 나온다."
+  ],
+  "troubleshooting": {
+    "headers": ["증상", "원인", "해결"],
+    "rows": [
+      ["박스는 그려지는데 이름이 ID:3 같이 나옴", "launch의 classes 리스트가 실제 모델 학습 클래스 수·순서와 안 맞음", "model_name에 맞는 올바른 클래스 리스트로 재실행"],
+      ["인식이 하나도 안 됨", "conf 임계값이 너무 높거나 물체가 클래스 목록에 없음", "conf를 낮춰보고, COCO 80개 클래스에 있는 물체로 재시도"],
+      ["~/yolo_start_detect 서비스가 안 보임", "/yolo/start를 아직 호출하지 않았거나 카메라 프레임이 한 장도 처리되지 않음", "/yolo/start 호출 후 카메라 앞에 물체를 비춰 최소 1프레임 처리시키기"]
+    ]
+  },
+  "checkQuestions": {
+    "headers": ["문항", "질문", "답"],
+    "rows": [
+      ["1", "yolo 앱은 몇 개의 서비스로 제어되는가? line_following과 몇 개 다른가?", "<input type=\"text\"/>"],
+      ["2", "model_name에 'garbage'가 들어가면 어떤 두 가지가 함께 바뀌는가?", "<input type=\"text\"/>"],
+      ["3", "class_name이 \"ID:7\"처럼 숫자로만 나온다면 무엇을 의심해봐야 하는가?", "<input type=\"text\"/>"]
+    ]
+  },
+  "advancedTask": "FPS 계산 코드(<code>self.fps = self.fps*0.9 + current_fps*0.1</code>)는 지수이동평균(EMA) 방식입니다. 계수를 0.9에서 0.5로 바꾸면 화면에 표시되는 FPS 값이 더 빨리/느리게 반응하는지 실습으로 확인해보고, 그 이유를 설명해보세요.",
+  "photoBlockHtml": null,
+  "prerequisites": [
+    {
+      "topic": "신뢰도(confidence) 임계값과 precision/recall 트레이드오프",
+      "url": "https://velog.io/@hseop/Precision-Recall-Curve-mAP",
+      "focus": "confidence threshold를 올리고 내릴 때 precision·recall이 어떻게 반대로 움직이는지 설명하는 부분 위주 — YOLO 전용 글은 아니지만 개념은 이 레슨의 conf 파라미터에 그대로 적용됨",
+      "source": "velog 기술 블로그 (한국어)",
+      "verifiedAt": "2026-09-09"
+    }
+  ],
+  "theoryDeepDive": {
+    "title": "지수이동평균(EMA)과 FPS 계산",
+    "content": [
+      "<code>self.fps = self.fps*0.9 + current_fps*0.1</code>은 지수이동평균(Exponential Moving Average, EMA)의 전형적인 형태다 — 일반화하면 <code>EMA_t = α·EMA_(t-1) + (1-α)·x_t</code>이고, 여기서 α=0.9다. 매 프레임 새로 측정한 순간 FPS(<code>x_t</code>)는 화면에 표시되는 값에 10%만 반영되고, 나머지 90%는 이전까지 누적된 값을 그대로 이어받는다.",
+      "이게 왜 필요한가 — 순간 FPS는 프레임마다 크게 흔들린다(카메라 읽기·추론 시간이 매번 조금씩 다르므로). α를 1에 가깝게 두면(예: 0.9) 화면에 찍히는 숫자가 부드럽게 변하지만, 실제 성능이 갑자기 나빠져도 반영되기까지 시간이 걸린다(반응 지연, lag). 반대로 α를 낮추면(예: 0.5) 실제 변화에 빠르게 반응하지만 프레임마다 숫자가 들쭉날쭉해 보인다 — 이게 advancedTask에서 0.9와 0.5를 비교해보라고 한 이유다.",
+      "이 구조는 신호처리의 1차 저역통과 필터(first-order low-pass filter)와 수학적으로 동일하다 — 여기서는 FPS 표시에만 쓰였지만, 센서 노이즈를 부드럽게 하고 싶은 어떤 값(예: 배터리 전압, 거리 측정값)에도 같은 공식을 그대로 적용할 수 있다. α 값 하나가 \"얼마나 부드럽게, 얼마나 빠르게 반응할지\"라는 트레이드오프를 전부 결정한다는 것이 이 공식의 핵심이다."
+    ]
+  },
+  "sortOrder": 9
+}
