@@ -15,7 +15,7 @@
   ],
   "knowledge": [
     "<code>/controller/cmd_vel</code> 토픽에 <code>geometry_msgs/Twist</code> 메시지를 발행하면 로봇이 움직인다.",
-    "<code>linear.x</code>는 전후진(backward) 속도(m/s), <code>angular.z</code>는 회전 속도(rad/s)다.",
+    "<code>linear.x</code>는 전후진(forward/backward) 속도(m/s), <code>angular.z</code>는 회전 속도(rad/s)다.",
     "새로 실행한 퍼블리셔에서 <code>--once</code>(1회성) 발행은 구독자와 매칭되기 전에 유실될 수 있음이 실측으로 확인됐다(정지·그리퍼(gripper) 명령 모두 재현). 반드시 반복 발행 방식을 쓴다."
   ],
   "materials": {
